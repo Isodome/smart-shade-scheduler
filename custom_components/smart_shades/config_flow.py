@@ -170,7 +170,7 @@ class SmartShadesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return SmartShadesOptionsFlow(config_entry)
+        return SmartShadesOptionsFlow()
 
 
 # ---------------------------------------------------------------------------
@@ -189,8 +189,7 @@ class SmartShadesOptionsFlow(config_entries.OptionsFlow):
            → edit_settings
     """
 
-    def __init__(self, config_entry) -> None:
-        self.config_entry = config_entry
+    def __init__(self) -> None:
         self._editing_index: int | None = None
 
     # ── Root menu ───────────────────────────────────────────────────────────
