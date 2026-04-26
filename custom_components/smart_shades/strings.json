@@ -3,98 +3,27 @@
     "step": {
       "user": {
         "title": "Smart Shade Scheduler",
-        "description": "Select the entity whose state represents the current automation mode (e.g. an `input_select` with values like KUEHLEN, NORMAL, REGEN).",
-        "data": {
-          "mode_entity": "Mode entity"
-        }
+        "description": "Click Submit to add the integration. Configure rules and settings in the Shade Scheduler panel that appears in the sidebar."
       }
     },
-    "error": {
-      "entity_not_found": "Entity not found. Please check the entity ID."
+    "abort": {
+      "already_configured": "Smart Shade Scheduler is already set up."
     }
   },
   "options": {
     "step": {
-      "menu": {
-        "title": "Smart Shade Scheduler",
-        "description": "Rules are managed in the Shade Scheduler panel in the sidebar.",
-        "menu_options": {
-          "edit_settings": "Global settings (tolerance, DND, wipe time)"
-        }
-      },
-      "add_rule": {
-        "title": "Add shade rule",
-        "description": "Rules are evaluated top-to-bottom; the **first match wins** for each cover. Sun conditions are optional — leave them empty to create a catch-all for that mode.\n\n**Tip:** create specific rules first (with sun conditions), then a catch-all rule (without conditions) as a fallback.",
-        "data": {
-          "name": "Rule name",
-          "mode": "Mode",
-          "covers": "Covers",
-          "azimuth_above": "Sun azimuth above (°)",
-          "elevation_above": "Sun elevation above (°)",
-          "elevation_below": "Sun elevation below (°)",
-          "position": "Target position (%)",
-          "tilt": "Target tilt (%)"
-        },
-        "data_description": {
-          "mode": "Must match the mode entity state exactly (e.g. `KUEHLEN`).",
-          "azimuth_above": "Rule only applies when sun azimuth exceeds this value. Leave empty to ignore.",
-          "elevation_above": "Rule only applies when sun elevation exceeds this value. Leave empty to ignore.",
-          "elevation_below": "Rule only applies when sun elevation is below this value. Leave empty to ignore.",
-          "position": "0 = fully closed, 100 = fully open. Leave empty to control tilt only.",
-          "tilt": "0 = slats closed, 100 = slats open. Leave empty to skip tilt control."
-        }
-      },
-      "manage_rules": {
-        "title": "Manage rules",
-        "description": "Select a rule to edit or delete.",
-        "data": {
-          "rule_index": "Rule"
-        }
-      },
-      "rule_action": {
-        "title": "What would you like to do?",
-        "menu_options": {
-          "edit_rule": "Edit this rule",
-          "delete_rule": "Delete this rule"
-        }
-      },
-      "edit_rule": {
-        "title": "Edit shade rule",
-        "data": {
-          "name": "Rule name",
-          "mode": "Mode",
-          "covers": "Covers",
-          "azimuth_above": "Sun azimuth above (°)",
-          "elevation_above": "Sun elevation above (°)",
-          "elevation_below": "Sun elevation below (°)",
-          "position": "Target position (%)",
-          "tilt": "Target tilt (%)"
-        },
-        "data_description": {
-          "mode": "Must match the mode entity state exactly.",
-          "azimuth_above": "Leave empty to ignore.",
-          "elevation_above": "Leave empty to ignore.",
-          "elevation_below": "Leave empty to ignore.",
-          "position": "0 = fully closed, 100 = fully open. Leave empty to skip.",
-          "tilt": "0 = slats closed, 100 = slats open. Leave empty to skip."
-        }
-      },
-      "delete_rule": {
-        "title": "Delete rule",
-        "description": "Are you sure you want to delete **{rule_name}**? This cannot be undone.",
-        "data": {
-          "confirm": "Yes, delete this rule"
-        }
-      },
       "edit_settings": {
         "title": "Global settings",
+        "description": "Rules and modes are managed in the **Shade Scheduler** panel in the sidebar.",
         "data": {
+          "mode_entity": "Mode entity",
           "tolerance": "Position tolerance (%)",
           "dnd_start": "Do-not-disturb start",
           "dnd_end": "Do-not-disturb end",
           "wipe_time": "Daily override reset time"
         },
         "data_description": {
+          "mode_entity": "Optional. An input_select (or any entity) whose state is the current mode name. Leave empty if you manage modes directly in the panel.",
           "tolerance": "A cover is only moved if it deviates more than this many percent from the target.",
           "dnd_start": "No automated movements after this time.",
           "dnd_end": "Automated movements resume at this time.",

@@ -221,7 +221,9 @@ class SmartShadesPanel extends HTMLElement {
     this._hass        = null;
     this._cfg         = null;   // data from ws_get_config
     this._rules       = [];     // working copy
+    this._modes       = [];     // ordered mode tab list
     this._mode        = null;   // selected tab
+    this._addingMode  = false;  // show new-mode input
     this._dirty       = false;
     this._saving      = false;
     this._error       = null;
@@ -238,10 +240,10 @@ class SmartShadesPanel extends HTMLElement {
       const cfg = await this._ws('smart_shades/get_config');
       this._cfg   = cfg;
       this._rules = JSON.parse(JSON.stringify(cfg.rules || []));
-      const modes = cfg.mode_options || [];
-      this._mode  = modes.includes(cfg.current_mode)
+      this._modes = cfg.mode_options || [];
+      this._mode  = this._modes.includes(cfg.current_mode)
         ? cfg.current_mode
-        : (modes[0] ?? null);
+        : (this._modes[0] ?? null);
       this._dirty = false;
       this._render();
     } catch (e) {
@@ -293,6 +295,17 @@ class SmartShadesPanel extends HTMLElement {
     const n = this._rules.filter(r => r.mode === this._mode).length + 1;
     this._rules.push({ name: `${this._mode} ${n}`, mode: this._mode, covers: [] });
     this._dirty = true;
+    this._render();
+  }
+
+  _confirmAddMode() {
+    const input = this.shadowRoot.querySelector('#new-mode-input');
+    const name = input?.value.trim().toUpperCase();
+    if (!name || this._modes.includes(name)) return;
+    this._collect();
+    this._modes = [...this._modes, name];
+    this._mode  = name;
+    this._addingMode = false;
     this._render();
   }
 
@@ -348,16 +361,23 @@ class SmartShadesPanel extends HTMLElement {
       return;
     }
 
-    const modes    = this._cfg.mode_options || [];
-    const curMode  = this._cfg.current_mode;
+    const curMode   = this._cfg.current_mode;
     const overrides = new Set(this._cfg.overrides || []);
-    const peers    = this._rulesForMode();
+    const peers     = this._rulesForMode();
 
     // ── Mode tabs ─────────────────────────────────────────────────
-    const tabsHtml = modes.map(m => `
+    const tabsHtml = this._modes.map(m => `
       <button class="mode-tab${m === this._mode ? ' active' : ''}" data-mode="${m}">
         ${m}${m === curMode ? '<span class="live-dot" title="Active mode"></span>' : ''}
       </button>`).join('');
+
+    const addModeHtml = this._addingMode
+      ? `<div style="display:flex;gap:6px;align-items:center">
+           <input id="new-mode-input" style="width:110px;padding:5px 8px;border:1px solid var(--primary-color);border-radius:6px;background:var(--primary-background-color);color:inherit;font-size:13px" placeholder="MODE NAME" />
+           <button class="mode-tab active" id="confirm-mode-btn">Add</button>
+           <button class="mode-tab" id="cancel-mode-btn">✕</button>
+         </div>`
+      : `<button class="mode-tab" id="add-mode-btn" title="Add a new mode tab">＋</button>`;
 
     // ── Table rows ─────────────────────────────────────────────────
     const rowsHtml = peers.map(({ r, i }, pos) => {
@@ -404,7 +424,7 @@ class SmartShadesPanel extends HTMLElement {
       <h1>Shade Scheduler</h1>
       ${this._error ? `<div class="error-banner">${this._error}</div>` : ''}
 
-      <div class="mode-tabs">${tabsHtml}</div>
+      <div class="mode-tabs">${tabsHtml}${addModeHtml}</div>
 
       <div class="card">
         <table>
@@ -446,13 +466,34 @@ class SmartShadesPanel extends HTMLElement {
       </div>`;
 
     // ── Event wiring ───────────────────────────────────────────────
-    root.querySelectorAll('.mode-tab').forEach(btn =>
+    root.querySelectorAll('.mode-tab[data-mode]').forEach(btn =>
       btn.addEventListener('click', () => {
         this._collect();
         this._mode = btn.dataset.mode;
+        this._addingMode = false;
         this._render();
       })
     );
+
+    root.querySelector('#add-mode-btn')?.addEventListener('click', () => {
+      this._addingMode = true;
+      this._render();
+      root.querySelector('#new-mode-input')?.focus();
+    });
+
+    root.querySelector('#confirm-mode-btn')?.addEventListener('click', () => {
+      this._confirmAddMode();
+    });
+
+    root.querySelector('#cancel-mode-btn')?.addEventListener('click', () => {
+      this._addingMode = false;
+      this._render();
+    });
+
+    root.querySelector('#new-mode-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this._confirmAddMode();
+      if (e.key === 'Escape') { this._addingMode = false; this._render(); }
+    });
 
     root.querySelector('#add-btn')
       .addEventListener('click', () => this._addRule());

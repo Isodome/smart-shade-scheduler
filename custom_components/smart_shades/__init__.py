@@ -85,10 +85,11 @@ async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
 
 
 async def _async_options_updated(hass: HomeAssistant, entry) -> None:
-    """Called by HA when options are saved — re-init the wipe time tracker."""
+    """Re-init time/mode listeners whenever options are saved."""
     manager: ShadeManager | None = hass.data[DOMAIN].get(entry.entry_id)
     if manager:
         manager.reinit_wipe_tracker()
+        manager.reinit_mode_listener()
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +108,7 @@ class ShadeManager:
 
         self._unsub: list = []
         self._wipe_unsub = None
+        self._mode_unsub = None
         self._eval_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
@@ -118,14 +120,6 @@ class ShadeManager:
         self.hass.bus.async_listen_once(
             EVENT_HOMEASSISTANT_STARTED, self._on_ha_started
         )
-
-        mode_entity = self.entry.data.get(CONF_MODE_ENTITY)
-        if mode_entity:
-            self._unsub.append(
-                async_track_state_change_event(
-                    self.hass, mode_entity, self._on_mode_change
-                )
-            )
 
         self._unsub.append(
             async_track_state_change_event(
@@ -142,6 +136,7 @@ class ShadeManager:
         )
 
         self.reinit_wipe_tracker()
+        self.reinit_mode_listener()
 
     def reinit_wipe_tracker(self) -> None:
         """(Re-)register the daily override wipe. Safe to call repeatedly."""
@@ -158,6 +153,18 @@ class ShadeManager:
         except (ValueError, AttributeError):
             _LOGGER.error("Invalid wipe_time value: %s", wipe_str)
 
+    def reinit_mode_listener(self) -> None:
+        """(Re-)register the mode entity state change listener."""
+        if self._mode_unsub:
+            self._mode_unsub()
+            self._mode_unsub = None
+
+        mode_entity = self._opt(CONF_MODE_ENTITY, None)
+        if mode_entity:
+            self._mode_unsub = async_track_state_change_event(
+                self.hass, mode_entity, self._on_mode_change
+            )
+
     def unload(self) -> None:
         """Unsubscribe all listeners."""
         for unsub in self._unsub:
@@ -166,6 +173,9 @@ class ShadeManager:
         if self._wipe_unsub:
             self._wipe_unsub()
             self._wipe_unsub = None
+        if self._mode_unsub:
+            self._mode_unsub()
+            self._mode_unsub = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -250,7 +260,7 @@ class ShadeManager:
             _LOGGER.debug("DND active — skipping evaluation")
             return
 
-        mode_entity = self.entry.data.get(CONF_MODE_ENTITY)
+        mode_entity = self._opt(CONF_MODE_ENTITY, None)
         mode_state = self.hass.states.get(mode_entity) if mode_entity else None
         current_mode = mode_state.state if mode_state else None
 
