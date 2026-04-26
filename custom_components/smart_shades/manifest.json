@@ -1,0 +1,12 @@
+{
+  "domain": "smart_shades",
+  "name": "Smart Shade Scheduler",
+  "version": "1.0.0",
+  "config_flow": true,
+  "iot_class": "local_push",
+  "dependencies": [],
+  "requirements": [],
+  "codeowners": ["@Isodome"],
+  "documentation": "https://github.com/Isodome/smart-shade-scheduler",
+  "issue_tracker": "https://github.com/Isodome/smart-shade-scheduler/issues"
+}

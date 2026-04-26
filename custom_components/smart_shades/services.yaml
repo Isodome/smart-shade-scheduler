@@ -1,0 +1,15 @@
+clear_overrides:
+  name: Clear overrides
+  description: >
+    Clear manual override flags so automation resumes immediately.
+    By default clears all covers; pass an entity_id to clear only one.
+  fields:
+    entity_id:
+      name: Cover entity
+      description: >
+        Optional. The specific cover entity to clear the override for.
+        When omitted, all active overrides are cleared.
+      example: cover.living_room_blind
+      selector:
+        entity:
+          domain: cover

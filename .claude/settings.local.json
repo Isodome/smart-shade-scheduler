@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'length > 79 {print NR\": \"$0}' /home/dominic/dev/shade_scheduler/custom_components/smart_shades/config_flow.py)"
+    ]
+  }
+}
