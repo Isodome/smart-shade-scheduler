@@ -198,12 +198,8 @@ class SmartShadesOptionsFlow(config_entries.OptionsFlow):
         return await self.async_step_menu()
 
     async def async_step_menu(self, user_input=None):
-        rules = self.config_entry.options.get(CONF_RULES, [])
-        menu_options = ["add_rule", "edit_settings"]
-        if rules:
-            menu_options.insert(1, "manage_rules")
         return self.async_show_menu(
-            step_id="menu", menu_options=menu_options
+            step_id="menu", menu_options=["edit_settings"]
         )
 
     # ── Add rule ────────────────────────────────────────────────────────────

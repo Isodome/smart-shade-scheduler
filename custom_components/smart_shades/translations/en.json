@@ -17,10 +17,9 @@
     "step": {
       "menu": {
         "title": "Smart Shade Scheduler",
+        "description": "Rules are managed in the Shade Scheduler panel in the sidebar.",
         "menu_options": {
-          "add_rule": "Add rule",
-          "manage_rules": "Edit / delete a rule",
-          "edit_settings": "Global settings"
+          "edit_settings": "Global settings (tolerance, DND, wipe time)"
         }
       },
       "add_rule": {

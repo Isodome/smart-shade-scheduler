@@ -42,6 +42,12 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     # Re-init wipe tracker whenever options change (e.g. wipe_time updated)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
+    # One-time domain-level setup (panel + WS commands + service)
+    if not hass.data[DOMAIN].get("_panel"):
+        from . import panel as _panel
+        await _panel.async_setup(hass)
+        hass.data[DOMAIN]["_panel"] = True
+
     # Register service once per domain (guard against multiple entries)
     if not hass.services.has_service(DOMAIN, "clear_overrides"):
 
@@ -64,13 +70,16 @@ async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
     if manager:
         manager.unload()
 
-    # Remove service when the last entry is gone
+    # Tear down domain-level things when the last entry is gone
     remaining = [
         v for v in hass.data.get(DOMAIN, {}).values()
         if isinstance(v, ShadeManager)
     ]
     if not remaining:
         hass.services.async_remove(DOMAIN, "clear_overrides")
+        from . import panel as _panel
+        _panel.async_unload(hass)
+        hass.data[DOMAIN].pop("_panel", None)
 
     return True
 
