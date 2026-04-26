@@ -1,5 +1,6 @@
 """Sidebar panel + WebSocket API for Smart Shade Scheduler."""
 
+import logging
 import os
 
 import voluptuous as vol
@@ -12,6 +13,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import CONF_MODE_ENTITY, CONF_RULES, DOMAIN
 
+_LOGGER = logging.getLogger(__name__)
 _PANEL_URL = "smart-shades"
 _STATIC_URL = "/smart_shades_static"
 _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
@@ -19,25 +21,39 @@ _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
 
 async def async_setup(hass: HomeAssistant) -> None:
     """Register static path, sidebar panel and WebSocket commands."""
-    hass.http.register_static_path(_STATIC_URL, _WWW_DIR, cache_headers=False)
+    _LOGGER.warning("SmartShades: registering static path %s", _STATIC_URL)
+    try:
+        # HA 2024.6+ uses StaticPathConfig
+        from homeassistant.components.http import StaticPathConfig
+        hass.http.register_static_paths(
+            [StaticPathConfig(_STATIC_URL, _WWW_DIR, cache_ok=False)]
+        )
+    except (ImportError, AttributeError):
+        # Older HA fallback
+        hass.http.register_static_path(_STATIC_URL, _WWW_DIR)
 
-    async_register_built_in_panel(
-        hass,
-        "custom",
-        sidebar_title="Shades",
-        sidebar_icon="mdi:window-shutter-auto",
-        frontend_url_path=_PANEL_URL,
-        config={
-            "_panel_custom": {
-                "name": "smart-shades-panel",
-                "js_url": f"{_STATIC_URL}/smart_shades_panel.js",
-            }
-        },
-        require_admin=True,
-    )
+    _LOGGER.debug("Registering built-in panel")
+    try:
+        async_register_built_in_panel(
+            hass,
+            "custom",
+            sidebar_title="Shades",
+            sidebar_icon="mdi:window-shutter-auto",
+            frontend_url_path=_PANEL_URL,
+            config={
+                "_panel_custom": {
+                    "name": "smart-shades-panel",
+                    "js_url": f"{_STATIC_URL}/smart_shades_panel.js",
+                }
+            },
+        )
+    except Exception:
+        _LOGGER.exception("async_register_built_in_panel failed")
+        raise
 
     websocket_api.async_register_command(hass, ws_get_config)
     websocket_api.async_register_command(hass, ws_save_rules)
+    _LOGGER.debug("Panel setup complete")
 
 
 def async_unload(hass: HomeAssistant) -> None:
