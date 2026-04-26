@@ -49,7 +49,9 @@ def async_unload(hass: HomeAssistant) -> None:
 # WebSocket: read current config + state
 # ---------------------------------------------------------------------------
 
-@websocket_api.websocket_command({"type": "smart_shades/get_config"})
+@websocket_api.websocket_command(
+    {vol.Required("type"): "smart_shades/get_config"}
+)
 @callback
 def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
     entries = hass.config_entries.async_entries(DOMAIN)
