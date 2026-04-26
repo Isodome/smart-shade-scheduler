@@ -44,9 +44,12 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
 
     # One-time domain-level setup (panel + WS commands + service)
     if not hass.data[DOMAIN].get("_panel"):
-        from . import panel as _panel
-        await _panel.async_setup(hass)
-        hass.data[DOMAIN]["_panel"] = True
+        try:
+            from . import panel as _panel
+            await _panel.async_setup(hass)
+            hass.data[DOMAIN]["_panel"] = True
+        except Exception:
+            _LOGGER.exception("Failed to set up sidebar panel (non-fatal)")
 
     # Register service once per domain (guard against multiple entries)
     if not hass.services.has_service(DOMAIN, "clear_overrides"):

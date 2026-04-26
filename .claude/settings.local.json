@@ -4,6 +4,8 @@
       "Bash(awk *)",
       "Bash(ssh root@192.168.88.253 \"ha core *\")",
       "Bash(ssh root@192.168.88.253 \"find *\")",
+      "Bash(ssh root@192.168.88.253 \"cat *\")",
+      "Bash(ssh root@192.168.88.253 \"ls *\")",
       "Bash(ssh root@192.168.88.253 \"journalctl *\")"
     ]
   }
