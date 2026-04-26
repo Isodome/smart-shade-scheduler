@@ -23,8 +23,11 @@ async def async_setup(hass: HomeAssistant) -> None:
     """Register static path, sidebar panel and WebSocket commands."""
     _LOGGER.debug("Registering static path %s → %s", _STATIC_URL, _WWW_DIR)
     from homeassistant.components.http import StaticPathConfig
+    import inspect
+    sig = inspect.signature(StaticPathConfig)
+    _LOGGER.debug("StaticPathConfig signature: %s", sig)
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(_STATIC_URL, _WWW_DIR, cache_ok=False)]
+        [StaticPathConfig(_STATIC_URL, _WWW_DIR)]
     )
     _LOGGER.debug("Static path registered")
 
