@@ -21,18 +21,18 @@ _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
 
 async def async_setup(hass: HomeAssistant) -> None:
     """Register static path, sidebar panel and WebSocket commands."""
-    _LOGGER.warning("SmartShades: registering static path %s", _STATIC_URL)
+    _LOGGER.debug("Registering static path %s → %s", _STATIC_URL, _WWW_DIR)
     try:
-        # HA 2024.6+ uses StaticPathConfig
         from homeassistant.components.http import StaticPathConfig
         hass.http.register_static_paths(
             [StaticPathConfig(_STATIC_URL, _WWW_DIR, cache_ok=False)]
         )
+        _LOGGER.debug("Static path registered via StaticPathConfig")
     except (ImportError, AttributeError):
-        # Older HA fallback
+        _LOGGER.debug("StaticPathConfig unavailable, using legacy register_static_path")
         hass.http.register_static_path(_STATIC_URL, _WWW_DIR)
 
-    _LOGGER.debug("Registering built-in panel")
+    _LOGGER.debug("Registering sidebar panel at /%s", _PANEL_URL)
     try:
         async_register_built_in_panel(
             hass,
@@ -47,13 +47,14 @@ async def async_setup(hass: HomeAssistant) -> None:
                 }
             },
         )
+        _LOGGER.debug("Panel registered OK")
     except Exception:
         _LOGGER.exception("async_register_built_in_panel failed")
         raise
 
     websocket_api.async_register_command(hass, ws_get_config)
     websocket_api.async_register_command(hass, ws_save_rules)
-    _LOGGER.debug("Panel setup complete")
+    _LOGGER.debug("Panel setup complete — JS at %s/smart_shades_panel.js", _STATIC_URL)
 
 
 def async_unload(hass: HomeAssistant) -> None:
