@@ -26,7 +26,9 @@ from .const import (
     DEFAULT_TOLERANCE,
     DEFAULT_WIPE_TIME,
     DOMAIN,
+    FALLBACK_MODE,
     OVERRIDE_DURATION_HOURS,
+    PRIORITY_MODE,
     SCAN_INTERVAL_MINUTES,
 )
 
@@ -295,6 +297,53 @@ class ShadeManager:
         async with self._eval_lock:
             await self._do_evaluate()
 
+    @staticmethod
+    def _rule_matches(
+        rule: dict,
+        azimuth: float,
+        elevation: float,
+        hour: int,
+        minute: int,
+    ) -> bool:
+        def _ok(key, val, op):
+            v = rule.get(key)
+            return v is None or op(val, v)
+
+        return (
+            _ok("azimuth_above",   azimuth,   float.__gt__)
+            and _ok("elevation_above", elevation, float.__gt__)
+            and _ok("elevation_below", elevation, float.__lt__)
+            and _ok("hour_above",   hour,   int.__gt__)
+            and _ok("hour_below",   hour,   int.__lt__)
+            and _ok("minute_above", minute, int.__gt__)
+            and _ok("minute_below", minute, int.__lt__)
+        )
+
+    @staticmethod
+    def _fill_targets(
+        mode: str,
+        rules: list,
+        targets: dict,
+        azimuth: float,
+        elevation: float,
+        hour: int,
+        minute: int,
+    ) -> None:
+        """Apply first-matching rules for `mode` to covers not yet targeted."""
+        for rule in rules:
+            if rule.get("mode") != mode:
+                continue
+            if not ShadeManager._rule_matches(
+                rule, azimuth, elevation, hour, minute
+            ):
+                continue
+            for cover in rule.get("covers", []):
+                if cover not in targets:
+                    targets[cover] = {
+                        "p": rule.get("position"),
+                        "t": rule.get("tilt"),
+                    }
+
     async def _do_evaluate(self) -> None:
         if self._is_dnd_active():
             _LOGGER.debug("DND active — skipping evaluation")
@@ -313,41 +362,16 @@ class ShadeManager:
         tolerance = self._tolerance()
         now = datetime.now()
 
-        now_hour = now.hour
-        now_minute = now.minute
+        rules = self.entry.options.get(CONF_RULES, [])
+        hour, minute = now.hour, now.minute
+        ctx = (azimuth, elevation, hour, minute)
 
-        # First matching rule wins per cover
+        # 3-pass: priority → current mode → fallback
         shade_targets: dict[str, dict] = {}
-        for rule in self.entry.options.get(CONF_RULES, []):
-            if rule.get("mode") != current_mode:
-                continue
-            az_min = rule.get("azimuth_above")
-            el_max = rule.get("elevation_below")
-            el_min = rule.get("elevation_above")
-            h_min = rule.get("hour_above")
-            h_max = rule.get("hour_below")
-            m_min = rule.get("minute_above")
-            m_max = rule.get("minute_below")
-            if az_min is not None and azimuth <= az_min:
-                continue
-            if el_max is not None and elevation >= el_max:
-                continue
-            if el_min is not None and elevation <= el_min:
-                continue
-            if h_min is not None and now_hour <= h_min:
-                continue
-            if h_max is not None and now_hour >= h_max:
-                continue
-            if m_min is not None and now_minute <= m_min:
-                continue
-            if m_max is not None and now_minute >= m_max:
-                continue
-            for cover in rule.get("covers", []):
-                if cover not in shade_targets:
-                    shade_targets[cover] = {
-                        "p": rule.get("position"),
-                        "t": rule.get("tilt"),
-                    }
+        self._fill_targets(PRIORITY_MODE, rules, shade_targets, *ctx)
+        if current_mode:
+            self._fill_targets(current_mode, rules, shade_targets, *ctx)
+        self._fill_targets(FALLBACK_MODE, rules, shade_targets, *ctx)
 
         for entity_id, target in shade_targets.items():
             state = self.hass.states.get(entity_id)

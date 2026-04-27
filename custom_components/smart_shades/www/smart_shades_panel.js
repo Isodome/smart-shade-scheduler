@@ -116,7 +116,19 @@ const CSS = `
     border-color: #e65100;
     opacity: 1;
   }
+  .mode-tab.special {
+    border-style: dotted;
+    font-style: italic;
+    color: var(--secondary-text-color);
+  }
+  .mode-tab.special.active {
+    background: #5c6bc0;
+    border-color: #5c6bc0;
+    color: #fff;
+    font-style: italic;
+  }
   .orphan-warn { font-size: 11px; margin-left: 4px; vertical-align: middle; }
+  .section-special { color: #5c6bc0; }
   .live-dot {
     display: inline-block;
     width: 7px; height: 7px;
@@ -307,6 +319,7 @@ class SmartShadesPanel extends HTMLElement {
     this._modes       = [];     // ordered mode tab list
     this._mode        = null;   // selected tab
     this._orphaned    = new Set();
+    this._special     = new Set();
     this._dirty       = false;
     this._saving      = false;
     this._error       = null;
@@ -325,6 +338,7 @@ class SmartShadesPanel extends HTMLElement {
       this._rules    = JSON.parse(JSON.stringify(cfg.rules || []));
       this._modes    = cfg.mode_options || [];
       this._orphaned = new Set(cfg.orphaned_modes || []);
+      this._special  = new Set(cfg.special_modes  || []);
       this._mode     = this._modes.includes(cfg.current_mode)
         ? cfg.current_mode
         : (this._modes[0] ?? null);
@@ -452,16 +466,29 @@ class SmartShadesPanel extends HTMLElement {
     const overrides = new Set(this._cfg.overrides || []);
 
     // ── Mode tabs ─────────────────────────────────────────────────
+    const MODE_LABELS = {
+      '_priority': '↑ Priority',
+      '_fallback': '↓ Fallback',
+    };
+    const MODE_TITLES = {
+      '_priority': 'Evaluated before all mode rules — overrides everything',
+      '_fallback': 'Evaluated only when no mode rule matched a cover',
+    };
+
     const tabsHtml = this._modes.map(m => {
       const orphaned = this._orphaned.has(m);
+      const special  = this._special.has(m);
       const cls = [
         'mode-tab',
         m === this._mode ? 'active' : '',
         orphaned ? 'orphaned' : '',
+        special  ? 'special'  : '',
       ].filter(Boolean).join(' ');
-      return `<button class="${cls}" data-mode="${m}"
-          title="${orphaned ? 'No longer in input_select — tab disappears when all rules are deleted' : m}">
-        ${m}
+      const title = special  ? MODE_TITLES[m]
+        : orphaned ? 'Not in input_select — removed when all rules deleted'
+        : m;
+      return `<button class="${cls}" data-mode="${m}" title="${title}">
+        ${MODE_LABELS[m] || m}
         ${orphaned ? '<span class="orphan-warn">⚠</span>' : ''}
         ${m === curMode ? '<span class="live-dot"></span>' : ''}
       </button>`;
@@ -508,7 +535,10 @@ class SmartShadesPanel extends HTMLElement {
 
       return `
         <div class="mode-section" id="mode-sec-${mode}" data-mode="${mode}">
-          <div class="section-heading">${mode}</div>
+          <div class="section-heading${this._special.has(mode) ? ' section-special' : ''}">
+            ${MODE_LABELS[mode] || mode}
+            ${this._orphaned.has(mode) ? ' <span class="orphan-warn">⚠ not in input_select</span>' : ''}
+          </div>
           <div class="card">
             <table>
               <thead><tr>

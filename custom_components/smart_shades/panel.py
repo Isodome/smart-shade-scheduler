@@ -11,13 +11,20 @@ from homeassistant.components.frontend import (
 )
 from homeassistant.core import HomeAssistant, callback
 
-from .const import CONF_MODE_ENTITY, CONF_RULES, DOMAIN
+from .const import (
+    CONF_MODE_ENTITY,
+    CONF_RULES,
+    DOMAIN,
+    FALLBACK_MODE,
+    PRIORITY_MODE,
+    SPECIAL_MODES,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _PANEL_URL = "smart-shades"
 _STATIC_URL = "/smart_shades_static"
 _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
-_JS_VERSION = "9"  # bump to bust the browser cache
+_JS_VERSION = "10"  # bump to bust the browser cache
 
 
 async def async_setup(hass: HomeAssistant) -> None:
@@ -91,9 +98,14 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
     # Modes that have rules but no longer exist in the input_select
     rule_modes = list(dict.fromkeys(
         r["mode"] for r in rules if r.get("mode")
-    ))  # ordered, deduped
-    orphaned = [m for m in rule_modes if m not in entity_options]
-    combined = entity_options + orphaned
+    ))
+    orphaned = [
+        m for m in rule_modes
+        if m not in entity_options and m not in SPECIAL_MODES
+    ]
+    combined = (
+        [PRIORITY_MODE] + entity_options + orphaned + [FALLBACK_MODE]
+    )
 
     manager = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     overrides = (
@@ -109,6 +121,7 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
         "current_mode": mode_state.state if mode_state else None,
         "mode_options": combined,
         "orphaned_modes": orphaned,
+        "special_modes": list(SPECIAL_MODES),
         "overrides": overrides,
     })
 
