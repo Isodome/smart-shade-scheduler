@@ -29,6 +29,15 @@ function parseCondition(str) {
   return result;
 }
 
+/** Returns {ok: bool, bad: string[]} */
+function validateCondition(str) {
+  if (!str.trim()) return { ok: true, bad: [] };
+  const bad = str.trim().split(/\s+/).filter(token =>
+    !token.match(/^(az(?:imuth)?|el(?:evation)?|h(?:our)?|m(?:in(?:ute)?)?)(>|<)-?\d+(?:\.\d+)?$/i)
+  );
+  return { ok: bad.length === 0, bad };
+}
+
 function formatCondition(rule) {
   const parts = [];
   if (rule.azimuth_above   != null) parts.push(`az>${rule.azimuth_above}`);
@@ -197,6 +206,7 @@ const CSS = `
     color: inherit; opacity: .7; font-size: 12px; line-height: 1;
   }
   .chip-rm:hover { opacity: 1; }
+  .chip-warn { background: #e65100; }
   .cover-add {
     border: 1px solid transparent; border-radius: 6px; padding: 3px 6px;
     min-width: 120px; flex: 1;
@@ -204,6 +214,15 @@ const CSS = `
   }
   .cover-add:hover { border-color: var(--divider-color); background: var(--primary-background-color); }
   .cover-add:focus { outline: none; border-color: var(--primary-color); background: var(--primary-background-color); }
+
+  /* ── Condition validation badge ───────────────────── */
+  .cond-wrap { display: flex; align-items: center; gap: 4px; }
+  .cond-badge {
+    flex-shrink: 0; font-size: 13px; line-height: 1;
+    transition: color .15s;
+  }
+  .cond-badge.ok    { color: #4caf50; }
+  .cond-badge.error { color: var(--error-color, #b00020); }
 
   /* ── Helpers link ──────────────────────────────────── */
   .helpers-link {
@@ -340,9 +359,13 @@ class SmartShadesPanel extends HTMLElement {
   }
 
   _coverPickerHtml(covers) {
-    const chips = (covers || []).map(c =>
-      `<span class="chip">${c}<button class="chip-rm" data-cover="${c}">✕</button></span>`
-    ).join('');
+    const states = this._hass?.states || {};
+    const chips = (covers || []).map(c => {
+      const known = c in states;
+      const cls = known ? 'chip' : 'chip chip-warn';
+      const title = known ? '' : ` title="Entity not found"`;
+      return `<span class="${cls}"${title}>${c}<button class="chip-rm" data-cover="${c}">✕</button></span>`;
+    }).join('');
     return `<div class="cover-picker" data-covers='${JSON.stringify(covers || [])}'>
       <div class="chips">${chips}</div>
       <input class="cover-add" list="covers-list" placeholder="add cover…" autocomplete="off" />
@@ -439,7 +462,10 @@ class SmartShadesPanel extends HTMLElement {
             </td>
             <td>${this._coverPickerHtml(r.covers)}</td>
             <td>
-              <input class="f-cond" value="${formatCondition(r)}" placeholder="az>150 el<30" />
+              <div class="cond-wrap">
+                <input class="f-cond" value="${formatCondition(r)}" placeholder="az>150 el<30" />
+                <span class="cond-badge ${validateCondition(formatCondition(r)).ok ? 'ok' : 'error'}">${formatCondition(r) ? (validateCondition(formatCondition(r)).ok ? '✓' : '✗') : ''}</span>
+              </div>
             </td>
             <td><input class="f-pos narrow" type="number" min="0" max="100"
               value="${r.position ?? ''}" placeholder="—" /></td>
@@ -618,8 +644,26 @@ class SmartShadesPanel extends HTMLElement {
       inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
     });
 
-    // Mark dirty on condition/pos/tilt edits
-    root.querySelectorAll('.f-cond, .f-pos, .f-tilt').forEach(inp =>
+    // Live condition validation
+    root.querySelectorAll('.f-cond').forEach(inp => {
+      const badge = inp.nextElementSibling;
+      const update = () => {
+        const v = validateCondition(inp.value);
+        if (!inp.value.trim()) {
+          badge.textContent = '';
+          badge.className = 'cond-badge';
+        } else {
+          badge.textContent = v.ok ? '✓' : '✗';
+          badge.className   = `cond-badge ${v.ok ? 'ok' : 'error'}`;
+          badge.title       = v.ok ? '' : `Unknown token(s): ${v.bad.join(', ')}`;
+        }
+        markDirty();
+      };
+      inp.addEventListener('input', update);
+    });
+
+    // Mark dirty on pos/tilt edits
+    root.querySelectorAll('.f-pos, .f-tilt').forEach(inp =>
       inp.addEventListener('input', markDirty)
     );
 
