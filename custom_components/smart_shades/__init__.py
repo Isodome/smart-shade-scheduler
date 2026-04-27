@@ -14,8 +14,10 @@ from homeassistant.helpers.event import (
 
 from .const import (
     CONF_DND_END,
+    CONF_DND_ENTITY,
     CONF_DND_START,
     CONF_MODE_ENTITY,
+    CONF_OVERRIDE_DURATION_ENTITY,
     CONF_RULES,
     CONF_TOLERANCE,
     CONF_WIPE_TIME,
@@ -166,7 +168,7 @@ class ShadeManager:
             self._mode_unsub()
             self._mode_unsub = None
 
-        mode_entity = self._opt(CONF_MODE_ENTITY, None)
+        mode_entity = self.entry.data.get(CONF_MODE_ENTITY)
         if mode_entity:
             self._mode_unsub = async_track_state_change_event(
                 self.hass, mode_entity, self._on_mode_change
@@ -252,6 +254,13 @@ class ShadeManager:
         )
 
     def _is_dnd_active(self) -> bool:
+        # Binary sensor entity overrides manual time window if configured
+        dnd_entity = self.entry.data.get(CONF_DND_ENTITY)
+        if dnd_entity:
+            state = self.hass.states.get(dnd_entity)
+            if state:
+                return state.state == "on"
+
         start_str = self._opt(CONF_DND_START, DEFAULT_DND_START)
         end_str = self._opt(CONF_DND_END, DEFAULT_DND_END)
         try:
@@ -267,6 +276,17 @@ class ShadeManager:
         except Exception:
             return False
 
+    def _override_duration(self) -> timedelta:
+        entity = self.entry.data.get(CONF_OVERRIDE_DURATION_ENTITY)
+        if entity:
+            state = self.hass.states.get(entity)
+            if state:
+                try:
+                    return timedelta(hours=float(state.state))
+                except ValueError:
+                    pass
+        return timedelta(hours=OVERRIDE_DURATION_HOURS)
+
     def _tolerance(self) -> int:
         return int(self._opt(CONF_TOLERANCE, DEFAULT_TOLERANCE))
 
@@ -280,7 +300,7 @@ class ShadeManager:
             _LOGGER.debug("DND active — skipping evaluation")
             return
 
-        mode_entity = self._opt(CONF_MODE_ENTITY, None)
+        mode_entity = self.entry.data.get(CONF_MODE_ENTITY)
         mode_state = self.hass.states.get(mode_entity) if mode_entity else None
         current_mode = mode_state.state if mode_state else None
 
@@ -352,7 +372,7 @@ class ShadeManager:
                     or cur_tilt is None
                     or abs(int(cur_tilt) - target_tilt) <= tolerance
                 )
-                expired = age >= timedelta(hours=OVERRIDE_DURATION_HOURS)
+                expired = age >= self._override_duration()
                 if expired or (pos_ok and tilt_ok):
                     _LOGGER.info(
                         "Override resolved for %s (age=%s)", entity_id, age

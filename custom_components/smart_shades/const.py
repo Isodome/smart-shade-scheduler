@@ -24,6 +24,10 @@ RULE_MINUTE_BELOW = "minute_below"
 RULE_POSITION = "position"
 RULE_TILT = "tilt"
 
+# Optional helper entities that override manually-entered values
+CONF_DND_ENTITY = "dnd_entity"           # binary_sensor: on = DND active
+CONF_OVERRIDE_DURATION_ENTITY = "override_duration_entity"  # input_number: hours
+
 # Defaults (time values as HH:MM:SS to match TimeSelector output)
 DEFAULT_TOLERANCE = 5
 DEFAULT_WIPE_TIME = "04:00:00"

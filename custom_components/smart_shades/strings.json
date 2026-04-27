@@ -3,27 +3,39 @@
     "step": {
       "user": {
         "title": "Smart Shade Scheduler",
-        "description": "Click Submit to add the integration. Configure rules and settings in the Shade Scheduler panel that appears in the sidebar."
+        "description": "Select the `input_select` helper whose options define your automation modes.",
+        "data": {
+          "mode_entity": "Mode entity (input_select)",
+          "dnd_entity": "Do-not-disturb sensor (optional)",
+          "override_duration_entity": "Override duration entity (optional)"
+        },
+        "data_description": {
+          "mode_entity": "The input_select whose options define your automation modes.",
+          "dnd_entity": "A binary_sensor that is `on` when automation should pause. Overrides the time-based DND window.",
+          "override_duration_entity": "An input_number (in hours) controlling how long manual overrides last. Overrides the built-in 4-hour default."
+        }
       }
     },
+    "error": {
+      "entity_not_found": "Entity not found.",
+      "no_options": "This entity has no options defined. Add at least one option to the input_select first."
+    },
     "abort": {
-      "already_configured": "Smart Shade Scheduler is already set up."
+      "already_configured": "Smart Shade Scheduler is already configured. The mode entity has been updated."
     }
   },
   "options": {
     "step": {
       "edit_settings": {
         "title": "Global settings",
-        "description": "Rules and modes are managed in the **Shade Scheduler** panel in the sidebar.",
+        "description": "Rules are managed in the **Shade Scheduler** panel in the sidebar.",
         "data": {
-          "mode_entity": "Mode entity",
           "tolerance": "Position tolerance (%)",
           "dnd_start": "Do-not-disturb start",
           "dnd_end": "Do-not-disturb end",
           "wipe_time": "Daily override reset time"
         },
         "data_description": {
-          "mode_entity": "Optional. An input_select (or any entity) whose state is the current mode name. Leave empty if you manage modes directly in the panel.",
           "tolerance": "A cover is only moved if it deviates more than this many percent from the target.",
           "dnd_start": "No automated movements after this time.",
           "dnd_end": "Automated movements resume at this time.",

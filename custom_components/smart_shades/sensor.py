@@ -1,12 +1,12 @@
 """Sensor entity exposing the Smart Shade Scheduler's internal state."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 
-from .const import CONF_MODE_ENTITY, DOMAIN, OVERRIDE_DURATION_HOURS
+from .const import CONF_MODE_ENTITY, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class SmartShadesSensor(SensorEntity):
-    """Single sensor that surfaces the scheduler's assumed positions and overrides."""
+    """Surfaces assumed cover positions and active overrides as attributes."""
 
     _attr_icon = "mdi:window-shutter-auto"
     _attr_should_poll = False
@@ -35,7 +35,7 @@ class SmartShadesSensor(SensorEntity):
 
     @property
     def native_value(self) -> str:
-        mode_entity = self._manager._opt(CONF_MODE_ENTITY, None)
+        mode_entity = self._entry.data.get(CONF_MODE_ENTITY)
         if mode_entity:
             state = self._hass.states.get(mode_entity)
             if state:
@@ -47,7 +47,7 @@ class SmartShadesSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         now = datetime.now()
-        expiry_td = timedelta(hours=OVERRIDE_DURATION_HOURS)
+        expiry_td = self._manager._override_duration()
 
         assumed = {
             entity_id: {

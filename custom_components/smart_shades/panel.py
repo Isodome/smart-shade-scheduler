@@ -76,17 +76,15 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
         return
 
     entry = entries[0]
-    mode_entity = entry.options.get(CONF_MODE_ENTITY)
+    mode_entity = entry.data.get(CONF_MODE_ENTITY)
     mode_state = hass.states.get(mode_entity) if mode_entity else None
 
-    # Tabs = input_select options (if any) + modes already used in rules
-    entity_options: list[str] = (
+    # Tabs = exactly the input_select options
+    combined: list[str] = (
         list(mode_state.attributes.get("options", []))
         if mode_state else []
     )
     rules = entry.options.get(CONF_RULES, [])
-    rule_modes = [r["mode"] for r in rules if r.get("mode")]
-    combined = list(dict.fromkeys(entity_options + rule_modes))
 
     manager = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     overrides = (
