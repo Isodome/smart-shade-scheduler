@@ -107,6 +107,16 @@ const CSS = `
     border-color: var(--primary-color);
     color: var(--text-primary-color, #fff);
   }
+  .mode-tab.orphaned {
+    border-style: dashed;
+    opacity: .75;
+  }
+  .mode-tab.orphaned.active {
+    background: #e65100;
+    border-color: #e65100;
+    opacity: 1;
+  }
+  .orphan-warn { font-size: 11px; margin-left: 4px; vertical-align: middle; }
   .live-dot {
     display: inline-block;
     width: 7px; height: 7px;
@@ -296,6 +306,7 @@ class SmartShadesPanel extends HTMLElement {
     this._rules       = [];     // working copy
     this._modes       = [];     // ordered mode tab list
     this._mode        = null;   // selected tab
+    this._orphaned    = new Set();
     this._dirty       = false;
     this._saving      = false;
     this._error       = null;
@@ -310,10 +321,11 @@ class SmartShadesPanel extends HTMLElement {
   async _load() {
     try {
       const cfg = await this._ws('smart_shades/get_config');
-      this._cfg   = cfg;
-      this._rules = JSON.parse(JSON.stringify(cfg.rules || []));
-      this._modes = cfg.mode_options || [];
-      this._mode  = this._modes.includes(cfg.current_mode)
+      this._cfg      = cfg;
+      this._rules    = JSON.parse(JSON.stringify(cfg.rules || []));
+      this._modes    = cfg.mode_options || [];
+      this._orphaned = new Set(cfg.orphaned_modes || []);
+      this._mode     = this._modes.includes(cfg.current_mode)
         ? cfg.current_mode
         : (this._modes[0] ?? null);
       this._dirty = false;
@@ -408,9 +420,12 @@ class SmartShadesPanel extends HTMLElement {
         entry_id: this._cfg.entry_id,
         rules: this._rules,
       });
-      this._cfg.rules = JSON.parse(JSON.stringify(this._rules));
       this._dirty = false;
       this._error = null;
+      // Reload so orphaned tabs clean up and input_select changes are reflected
+      this._cfg = null;
+      await this._load();
+      return;
     } catch (e) {
       this._error = `Save failed: ${e.message ?? e}`;
     }
@@ -436,10 +451,20 @@ class SmartShadesPanel extends HTMLElement {
     const overrides = new Set(this._cfg.overrides || []);
 
     // ── Mode tabs ─────────────────────────────────────────────────
-    const tabsHtml = this._modes.map(m => `
-      <button class="mode-tab${m === this._mode ? ' active' : ''}" data-mode="${m}">
-        ${m}${m === curMode ? '<span class="live-dot" title="Active mode"></span>' : ''}
-      </button>`).join('');
+    const tabsHtml = this._modes.map(m => {
+      const orphaned = this._orphaned.has(m);
+      const cls = [
+        'mode-tab',
+        m === this._mode ? 'active' : '',
+        orphaned ? 'orphaned' : '',
+      ].filter(Boolean).join(' ');
+      return `<button class="${cls}" data-mode="${m}"
+          title="${orphaned ? 'No longer in input_select — tab disappears when all rules are deleted' : m}">
+        ${m}
+        ${orphaned ? '<span class="orphan-warn">⚠</span>' : ''}
+        ${m === curMode ? '<span class="live-dot"></span>' : ''}
+      </button>`;
+    }).join('');
 
 
     // ── One section per mode ───────────────────────────────────────
