@@ -276,6 +276,9 @@ class ShadeManager:
         tolerance = self._tolerance()
         now = datetime.now()
 
+        now_hour = now.hour
+        now_minute = now.minute
+
         # First matching rule wins per cover
         shade_targets: dict[str, dict] = {}
         for rule in self.entry.options.get(CONF_RULES, []):
@@ -284,11 +287,23 @@ class ShadeManager:
             az_min = rule.get("azimuth_above")
             el_max = rule.get("elevation_below")
             el_min = rule.get("elevation_above")
+            h_min = rule.get("hour_above")
+            h_max = rule.get("hour_below")
+            m_min = rule.get("minute_above")
+            m_max = rule.get("minute_below")
             if az_min is not None and azimuth <= az_min:
                 continue
             if el_max is not None and elevation >= el_max:
                 continue
             if el_min is not None and elevation <= el_min:
+                continue
+            if h_min is not None and now_hour <= h_min:
+                continue
+            if h_max is not None and now_hour >= h_max:
+                continue
+            if m_min is not None and now_minute <= m_min:
+                continue
+            if m_max is not None and now_minute >= m_max:
                 continue
             for cover in rule.get("covers", []):
                 if cover not in shade_targets:

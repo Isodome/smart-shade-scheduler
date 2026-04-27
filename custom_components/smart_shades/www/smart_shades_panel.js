@@ -1,27 +1,30 @@
 /**
  * Smart Shade Scheduler — sidebar panel
  *
- * Condition text format (space-separated, case-insensitive):
- *   az>150      sun azimuth above 150°
- *   el>5        sun elevation above 5°
- *   el<30       sun elevation below 30°
- *   az>185 el<45 el>5   combined
- *   (empty)     catch-all — always matches
+ * Condition tokens (space-separated, case-insensitive):
+ *   az>150   azimuth above 150°       el<30  elevation below 30°
+ *   el>5     elevation above 5°       h>8    hour of day > 8 (0-23)
+ *   h<22     hour of day < 22         m>30   minute > 30
+ *   (empty)  catch-all — always matches
  */
 
 function parseCondition(str) {
   const result = {};
   for (const token of str.trim().split(/\s+/)) {
     const m = token.match(
-      /^(az(?:imuth)?|el(?:evation)?)(>|<)(-?\d+(?:\.\d+)?)$/i
+      /^(az(?:imuth)?|el(?:evation)?|h(?:our)?|m(?:in(?:ute)?)?)(>|<)(-?\d+(?:\.\d+)?)$/i
     );
     if (!m) continue;
     const [, key, op, val] = m;
     const v = parseFloat(val);
-    const isAz = key[0].toLowerCase() === 'a';
-    if (isAz  &&  op === '>') result.azimuth_above   = v;
-    if (!isAz &&  op === '>') result.elevation_above = v;
-    if (!isAz &&  op === '<') result.elevation_below = v;
+    const k = key[0].toLowerCase();
+    if      (k === 'a' && op === '>') result.azimuth_above   = v;
+    else if (k === 'e' && op === '>') result.elevation_above = v;
+    else if (k === 'e' && op === '<') result.elevation_below = v;
+    else if (k === 'h' && op === '>') result.hour_above      = v;
+    else if (k === 'h' && op === '<') result.hour_below      = v;
+    else if (k === 'm' && op === '>') result.minute_above    = v;
+    else if (k === 'm' && op === '<') result.minute_below    = v;
   }
   return result;
 }
@@ -31,6 +34,10 @@ function formatCondition(rule) {
   if (rule.azimuth_above   != null) parts.push(`az>${rule.azimuth_above}`);
   if (rule.elevation_above != null) parts.push(`el>${rule.elevation_above}`);
   if (rule.elevation_below != null) parts.push(`el<${rule.elevation_below}`);
+  if (rule.hour_above      != null) parts.push(`h>${rule.hour_above}`);
+  if (rule.hour_below      != null) parts.push(`h<${rule.hour_below}`);
+  if (rule.minute_above    != null) parts.push(`m>${rule.minute_above}`);
+  if (rule.minute_below    != null) parts.push(`m<${rule.minute_below}`);
   return parts.join(' ');
 }
 
@@ -158,6 +165,35 @@ const CSS = `
   .icon-btn.del:hover { background: var(--error-color, #b00020); color: #fff; }
   .override-icon { color: #ff9800; cursor: default; font-size: 14px; }
 
+  /* ── Cover chip picker ─────────────────────────────── */
+  .cover-picker { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .chips { display: contents; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    background: var(--primary-color); color: var(--text-primary-color, #fff);
+    border-radius: 12px; padding: 2px 6px 2px 8px; font-size: 11px;
+    white-space: nowrap;
+  }
+  .chip-rm {
+    background: none; border: none; cursor: pointer; padding: 0 1px;
+    color: inherit; opacity: .7; font-size: 12px; line-height: 1;
+  }
+  .chip-rm:hover { opacity: 1; }
+  .cover-add {
+    border: 1px solid transparent; border-radius: 6px; padding: 3px 6px;
+    min-width: 120px; flex: 1;
+    background: transparent; color: inherit; font-size: 12px;
+  }
+  .cover-add:hover { border-color: var(--divider-color); background: var(--primary-background-color); }
+  .cover-add:focus { outline: none; border-color: var(--primary-color); background: var(--primary-background-color); }
+
+  /* ── Helpers link ──────────────────────────────────── */
+  .helpers-link {
+    font-size: 12px; color: var(--primary-color);
+    text-decoration: none; opacity: .8;
+  }
+  .helpers-link:hover { opacity: 1; text-decoration: underline; }
+
   /* ── Add row ───────────────────────────────────────── */
   .add-row td { padding: 0; }
   .add-btn {
@@ -273,13 +309,16 @@ class SmartShadesPanel extends HTMLElement {
       const rule = this._rules[idx];
       if (!rule) continue;
 
-      rule.covers = row.querySelector('.f-covers').value
-        .split(',').map(s => s.trim()).filter(Boolean);
+      // covers come from the picker's data attribute (chips)
+      const picker = row.querySelector('.cover-picker');
+      rule.covers = picker
+        ? JSON.parse(picker.dataset.covers || '[]')
+        : [];
 
       const cond = parseCondition(row.querySelector('.f-cond').value);
-      delete rule.azimuth_above;
-      delete rule.elevation_above;
-      delete rule.elevation_below;
+      for (const k of ['azimuth_above','elevation_above','elevation_below',
+                        'hour_above','hour_below','minute_above','minute_below'])
+        delete rule[k];
       Object.assign(rule, cond);
 
       const pos = row.querySelector('.f-pos').value;
@@ -288,6 +327,16 @@ class SmartShadesPanel extends HTMLElement {
       const tilt = row.querySelector('.f-tilt').value;
       if (tilt !== '') rule.tilt = parseInt(tilt, 10); else delete rule.tilt;
     }
+  }
+
+  _coverPickerHtml(covers) {
+    const chips = (covers || []).map(c =>
+      `<span class="chip">${c}<button class="chip-rm" data-cover="${c}">✕</button></span>`
+    ).join('');
+    return `<div class="cover-picker" data-covers='${JSON.stringify(covers || [])}'>
+      <div class="chips">${chips}</div>
+      <input class="cover-add" list="covers-list" placeholder="add cover…" autocomplete="off" />
+    </div>`;
   }
 
   _addRule() {
@@ -392,11 +441,7 @@ class SmartShadesPanel extends HTMLElement {
                 ${pos === peers.length - 1 ? 'disabled' : ''} title="Move down">▼</button>
             </div>
           </td>
-          <td>
-            <input class="f-covers"
-              value="${(r.covers || []).join(', ')}"
-              placeholder="cover.room, cover.other" />
-          </td>
+          <td>${this._coverPickerHtml(r.covers)}</td>
           <td>
             <input class="f-cond"
               value="${formatCondition(r)}"
@@ -418,10 +463,29 @@ class SmartShadesPanel extends HTMLElement {
         </tr>`;
     }).join('');
 
+    // ── Cover datalist (autocomplete) ──────────────────────────────
+    const coverOptions = Object.keys(this._hass.states)
+      .filter(e => e.startsWith('cover.'))
+      .sort()
+      .map(e => `<option value="${e}">`)
+      .join('');
+
+    // ── Helpers link ───────────────────────────────────────────────
+    const modeEntity = this._cfg.mode_entity;
+    const helpersLink = modeEntity
+      ? `<a class="helpers-link" id="helpers-link" href="#"
+           title="Manage ${modeEntity} options">⚙ Mode options</a>`
+      : '';
+
     // ── Full HTML ──────────────────────────────────────────────────
     root.innerHTML = `
       <style>${CSS}</style>
-      <h1>Shade Scheduler</h1>
+      <datalist id="covers-list">${coverOptions}</datalist>
+
+      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:16px">
+        <h1 style="margin:0">Shade Scheduler</h1>
+        ${helpersLink}
+      </div>
       ${this._error ? `<div class="error-banner">${this._error}</div>` : ''}
 
       <div class="mode-tabs">${tabsHtml}${addModeHtml}</div>
@@ -431,7 +495,7 @@ class SmartShadesPanel extends HTMLElement {
           <thead>
             <tr>
               <th></th>
-              <th style="width:38%">Covers <span style="font-weight:400;opacity:.5">(comma-separated)</span></th>
+              <th style="width:38%">Covers</th>
               <th style="width:22%">Condition</th>
               <th style="width:8%">Pos%</th>
               <th style="width:8%">Tilt%</th>
@@ -453,11 +517,9 @@ class SmartShadesPanel extends HTMLElement {
 
       <div class="footer">
         <span class="hint">
-          Conditions (space-separated):
-          <code>az&gt;150</code> azimuth above &nbsp;
-          <code>el&gt;5</code> elevation above &nbsp;
-          <code>el&lt;30</code> elevation below<br>
-          Leave empty for catch-all. First matching rule wins. ⚠ = manual override active.
+          Conditions: <code>az&gt;150</code> <code>el&gt;5</code> <code>el&lt;30</code>
+          <code>h&gt;8</code> <code>h&lt;22</code> <code>m&gt;30</code> — space-separated, empty = catch-all.<br>
+          First matching rule wins per cover. ⚠ = manual override active.
         </span>
         <button class="save-btn" id="save-btn" ${this._saving ? 'disabled' : ''}>
           ${this._saving ? 'Saving…' : 'Save'}
@@ -513,18 +575,67 @@ class SmartShadesPanel extends HTMLElement {
       btn.addEventListener('click', () => this._moveRule(+btn.dataset.idx, +1))
     );
 
-    // Mark dirty on any edit
-    root.querySelectorAll('input').forEach(inp =>
-      inp.addEventListener('input', () => {
-        if (!this._dirty) {
-          this._dirty = true;
-          const dot = document.createElement('span');
-          dot.className = 'unsaved-dot';
-          const btn = root.querySelector('#save-btn');
-          if (btn && !btn.querySelector('.unsaved-dot')) btn.appendChild(dot);
+    // ── Cover chip pickers ─────────────────────────────────────────
+    const markDirty = () => {
+      if (this._dirty) return;
+      this._dirty = true;
+      const btn = root.querySelector('#save-btn');
+      if (btn && !btn.querySelector('.unsaved-dot')) {
+        const dot = document.createElement('span');
+        dot.className = 'unsaved-dot';
+        btn.appendChild(dot);
+      }
+    };
+
+    const rebindChips = (picker) => {
+      picker.querySelectorAll('.chip-rm').forEach(btn =>
+        btn.addEventListener('click', () => {
+          const covers = JSON.parse(picker.dataset.covers || '[]');
+          picker.dataset.covers = JSON.stringify(
+            covers.filter(c => c !== btn.dataset.cover)
+          );
+          picker.querySelector('.chips').innerHTML = JSON.parse(picker.dataset.covers)
+            .map(c => `<span class="chip">${c}<button class="chip-rm" data-cover="${c}">✕</button></span>`)
+            .join('');
+          rebindChips(picker);
+          markDirty();
+        })
+      );
+    };
+
+    root.querySelectorAll('.cover-picker').forEach(picker => {
+      rebindChips(picker);
+      const inp = picker.querySelector('.cover-add');
+      const commit = () => {
+        const val = inp.value.trim();
+        if (!val) return;
+        const covers = JSON.parse(picker.dataset.covers || '[]');
+        if (!covers.includes(val)) {
+          covers.push(val);
+          picker.dataset.covers = JSON.stringify(covers);
+          picker.querySelector('.chips').innerHTML = covers
+            .map(c => `<span class="chip">${c}<button class="chip-rm" data-cover="${c}">✕</button></span>`)
+            .join('');
+          rebindChips(picker);
+          markDirty();
         }
-      })
+        inp.value = '';
+      };
+      inp.addEventListener('change', commit);
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+    });
+
+    // Mark dirty on condition/pos/tilt edits
+    root.querySelectorAll('.f-cond, .f-pos, .f-tilt').forEach(inp =>
+      inp.addEventListener('input', markDirty)
     );
+
+    // ── Helpers link ───────────────────────────────────────────────
+    root.querySelector('#helpers-link')?.addEventListener('click', e => {
+      e.preventDefault();
+      history.pushState(null, '', '/config/helpers');
+      window.dispatchEvent(new CustomEvent('location-changed'));
+    });
   }
 }
 
