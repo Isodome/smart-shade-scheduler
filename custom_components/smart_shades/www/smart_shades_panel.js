@@ -172,6 +172,8 @@ const CSS = `
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover { background: var(--secondary-background-color, rgba(0,0,0,.03)); }
   tr.has-override { background: rgba(255,152,0,.08) !important; }
+  tr.row-invalid  { opacity: .55; }
+  tr.row-invalid .f-pos, tr.row-invalid .f-tilt { border-color: var(--error-color, #b00020); }
 
   /* ── Inputs ────────────────────────────────────────── */
   input {
@@ -430,9 +432,17 @@ class SmartShadesPanel extends HTMLElement {
     this._saving = true;
     this._render();
     try {
+      const conditionKeys = ['azimuth_above','elevation_above','elevation_below',
+        'hour_above','hour_below','minute_above','minute_below'];
+      const rules = this._rules.filter(r =>
+        (r.covers && r.covers.length > 0) ||
+        r.position != null ||
+        r.tilt != null ||
+        conditionKeys.some(k => r[k] != null)
+      );
       await this._ws('smart_shades/save_rules', {
         entry_id: this._cfg.entry_id,
-        rules: this._rules,
+        rules,
       });
       this._dirty  = false;
       this._error  = null;
@@ -503,8 +513,15 @@ class SmartShadesPanel extends HTMLElement {
 
       const rowsHtml = peers.map(({ r, i }, pos) => {
         const hasOv = (r.covers || []).some(c => overrides.has(c));
+        const _condKeys = ['azimuth_above','elevation_above','elevation_below',
+          'hour_above','hour_below','minute_above','minute_below'];
+        const hasContent = (r.covers && r.covers.length > 0) ||
+          r.position != null || r.tilt != null ||
+          _condKeys.some(k => r[k] != null);
+        const isInvalid = hasContent && r.position == null && r.tilt == null;
+        const rowClass = hasOv ? 'has-override' : isInvalid ? 'row-invalid' : '';
         return `
-          <tr data-idx="${i}"${hasOv ? ' class="has-override"' : ''}>
+          <tr data-idx="${i}"${rowClass ? ` class="${rowClass}"` : ''}>
             <td style="width:46px">
               <div class="row-btns" style="flex-direction:column;gap:0">
                 <button class="icon-btn up-btn" data-idx="${i}"
@@ -599,7 +616,9 @@ class SmartShadesPanel extends HTMLElement {
           <code>h&gt;8</code> hour after 8 &nbsp;
           <code>h&lt;22</code> hour before 22 &nbsp;
           <code>m&gt;30</code> minute after 30<br>
-          First matching rule wins per cover. ⚠ = manual override active.
+          First matching rule wins per cover. ⚠ = manual override active.<br>
+          <strong>↑ Priority</strong> rules are evaluated before all mode rules and override everything. &nbsp;
+          <strong>↓ Fallback</strong> rules are evaluated only when no rule in the current mode matched a cover.
         </span>
         <button class="save-btn" id="save-btn" ${this._saving ? 'disabled' : ''}>
           ${this._saving ? 'Saving…' : 'Save'}
