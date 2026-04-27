@@ -69,8 +69,18 @@ const CSS = `
     font-size: 13px;
   }
 
-  /* ── Mode tabs ─────────────────────────────────────── */
-  .mode-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  /* ── Mode tabs (sticky) ────────────────────────────── */
+  .tab-bar-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--primary-background-color);
+    margin: 0 -20px;
+    padding: 8px 20px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.1);
+    margin-bottom: 16px;
+  }
+  .mode-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
   .mode-tab {
     padding: 6px 18px;
     border-radius: 20px;
@@ -95,6 +105,14 @@ const CSS = `
     background: #4caf50;
     margin-left: 6px;
     vertical-align: middle;
+  }
+
+  /* ── Mode sections ─────────────────────────────────── */
+  .mode-section { margin-bottom: 24px; scroll-margin-top: 60px; }
+  .section-heading {
+    font-size: 13px; font-weight: 700; letter-spacing: .06em;
+    color: var(--secondary-text-color);
+    margin-bottom: 8px; text-transform: uppercase;
   }
 
   /* ── Card / table ──────────────────────────────────── */
@@ -294,17 +312,10 @@ class SmartShadesPanel extends HTMLElement {
 
   // ── Mutation helpers ──────────────────────────────────────────────────────
 
-  _rulesForMode() {
-    return this._rules
-      .map((r, i) => ({ r, i }))
-      .filter(({ r }) => r.mode === this._mode);
-  }
-
   /** Read DOM row inputs back into this._rules[]. */
   _collect() {
-    const tbody = this.shadowRoot.querySelector('#tbody');
-    if (!tbody) return;
-    for (const row of tbody.querySelectorAll('tr[data-idx]')) {
+    const root = this.shadowRoot;
+    for (const row of root.querySelectorAll('tr[data-idx]')) {
       const idx  = parseInt(row.dataset.idx, 10);
       const rule = this._rules[idx];
       if (!rule) continue;
@@ -339,10 +350,10 @@ class SmartShadesPanel extends HTMLElement {
     </div>`;
   }
 
-  _addRule() {
+  _addRule(mode = this._mode) {
     this._collect();
-    const n = this._rules.filter(r => r.mode === this._mode).length + 1;
-    this._rules.push({ name: `${this._mode} ${n}`, mode: this._mode, covers: [] });
+    const n = this._rules.filter(r => r.mode === mode).length + 1;
+    this._rules.push({ name: `${mode} ${n}`, mode, covers: [] });
     this._dirty = true;
     this._render();
   }
@@ -356,6 +367,11 @@ class SmartShadesPanel extends HTMLElement {
     this._mode  = name;
     this._addingMode = false;
     this._render();
+    // Scroll to the newly created section
+    requestAnimationFrame(() =>
+      this.shadowRoot.querySelector(`#mode-sec-${name}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    );
   }
 
   _deleteRule(idx) {
@@ -412,7 +428,6 @@ class SmartShadesPanel extends HTMLElement {
 
     const curMode   = this._cfg.current_mode;
     const overrides = new Set(this._cfg.overrides || []);
-    const peers     = this._rulesForMode();
 
     // ── Mode tabs ─────────────────────────────────────────────────
     const tabsHtml = this._modes.map(m => `
@@ -428,39 +443,61 @@ class SmartShadesPanel extends HTMLElement {
          </div>`
       : `<button class="mode-tab" id="add-mode-btn" title="Add a new mode tab">＋</button>`;
 
-    // ── Table rows ─────────────────────────────────────────────────
-    const rowsHtml = peers.map(({ r, i }, pos) => {
-      const hasOv = (r.covers || []).some(c => overrides.has(c));
+    // ── One section per mode ───────────────────────────────────────
+    const sectionsHtml = this._modes.map(mode => {
+      const peers = this._rules
+        .map((r, i) => ({ r, i }))
+        .filter(({ r }) => r.mode === mode);
+
+      const rowsHtml = peers.map(({ r, i }, pos) => {
+        const hasOv = (r.covers || []).some(c => overrides.has(c));
+        return `
+          <tr data-idx="${i}"${hasOv ? ' class="has-override"' : ''}>
+            <td style="width:46px">
+              <div class="row-btns" style="flex-direction:column;gap:0">
+                <button class="icon-btn up-btn" data-idx="${i}"
+                  ${pos === 0 ? 'disabled' : ''} title="Move up">▲</button>
+                <button class="icon-btn dn-btn" data-idx="${i}"
+                  ${pos === peers.length - 1 ? 'disabled' : ''} title="Move down">▼</button>
+              </div>
+            </td>
+            <td>${this._coverPickerHtml(r.covers)}</td>
+            <td>
+              <input class="f-cond" value="${formatCondition(r)}" placeholder="az>150 el<30" />
+            </td>
+            <td><input class="f-pos narrow" type="number" min="0" max="100"
+              value="${r.position ?? ''}" placeholder="—" /></td>
+            <td><input class="f-tilt narrow" type="number" min="0" max="100"
+              value="${r.tilt ?? ''}" placeholder="—" /></td>
+            <td style="width:64px">
+              <div class="row-btns">
+                ${hasOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
+                <button class="icon-btn del del-btn" data-idx="${i}" title="Delete">✕</button>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+
       return `
-        <tr data-idx="${i}"${hasOv ? ' class="has-override"' : ''}>
-          <td style="width:46px">
-            <div class="row-btns" style="flex-direction:column;gap:0">
-              <button class="icon-btn up-btn" data-idx="${i}"
-                ${pos === 0 ? 'disabled' : ''} title="Move up">▲</button>
-              <button class="icon-btn dn-btn" data-idx="${i}"
-                ${pos === peers.length - 1 ? 'disabled' : ''} title="Move down">▼</button>
-            </div>
-          </td>
-          <td>${this._coverPickerHtml(r.covers)}</td>
-          <td>
-            <input class="f-cond"
-              value="${formatCondition(r)}"
-              placeholder="az>150 el<30" />
-          </td>
-          <td><input class="f-pos narrow" type="number"
-            min="0" max="100"
-            value="${r.position ?? ''}" placeholder="—" /></td>
-          <td><input class="f-tilt narrow" type="number"
-            min="0" max="100"
-            value="${r.tilt ?? ''}" placeholder="—" /></td>
-          <td style="width:64px">
-            <div class="row-btns">
-              ${hasOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
-              <button class="icon-btn del del-btn" data-idx="${i}"
-                title="Delete rule">✕</button>
-            </div>
-          </td>
-        </tr>`;
+        <div class="mode-section" id="mode-sec-${mode}" data-mode="${mode}">
+          <div class="section-heading">${mode}</div>
+          <div class="card">
+            <table>
+              <thead><tr>
+                <th></th>
+                <th style="width:38%">Covers</th>
+                <th style="width:22%">Condition</th>
+                <th style="width:8%">Pos%</th>
+                <th style="width:8%">Tilt%</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="tbody-${mode}">${rowsHtml}</tbody>
+              <tbody><tr class="add-row"><td colspan="6">
+                <button class="add-btn" data-mode="${mode}">＋  Add rule for ${mode}</button>
+              </td></tr></tbody>
+            </table>
+          </div>
+        </div>`;
     }).join('');
 
     // ── Cover datalist (autocomplete) ──────────────────────────────
@@ -482,38 +519,18 @@ class SmartShadesPanel extends HTMLElement {
       <style>${CSS}</style>
       <datalist id="covers-list">${coverOptions}</datalist>
 
-      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:16px">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:16px 20px 0">
         <h1 style="margin:0">Shade Scheduler</h1>
         ${helpersLink}
       </div>
-      ${this._error ? `<div class="error-banner">${this._error}</div>` : ''}
 
-      <div class="mode-tabs">${tabsHtml}${addModeHtml}</div>
-
-      <div class="card">
-        <table>
-          <thead>
-            <tr>
-              <th></th>
-              <th style="width:38%">Covers</th>
-              <th style="width:22%">Condition</th>
-              <th style="width:8%">Pos%</th>
-              <th style="width:8%">Tilt%</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tbody">${rowsHtml}</tbody>
-          <tbody>
-            <tr class="add-row">
-              <td colspan="6">
-                <button class="add-btn" id="add-btn">
-                  ＋  Add rule for ${this._mode ?? '…'}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="tab-bar-wrap">
+        <div class="mode-tabs">${tabsHtml}${addModeHtml}</div>
       </div>
+
+      ${this._error ? `<div class="error-banner" style="margin:0 0 16px">${this._error}</div>` : ''}
+
+      ${sectionsHtml}
 
       <div class="footer">
         <span class="hint">
@@ -528,49 +545,58 @@ class SmartShadesPanel extends HTMLElement {
       </div>`;
 
     // ── Event wiring ───────────────────────────────────────────────
+
+    // Tab click → scroll to section
     root.querySelectorAll('.mode-tab[data-mode]').forEach(btn =>
       btn.addEventListener('click', () => {
-        this._collect();
         this._mode = btn.dataset.mode;
         this._addingMode = false;
-        this._render();
+        root.querySelectorAll('.mode-tab').forEach(t =>
+          t.classList.toggle('active', t.dataset.mode === this._mode)
+        );
+        root.querySelector(`#mode-sec-${this._mode}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       })
     );
+
+    // IntersectionObserver keeps active tab in sync while scrolling
+    const io = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          this._mode = e.target.dataset.mode;
+          root.querySelectorAll('.mode-tab[data-mode]').forEach(t =>
+            t.classList.toggle('active', t.dataset.mode === this._mode)
+          );
+        }
+      }
+    }, { threshold: 0.25 });
+    root.querySelectorAll('.mode-section').forEach(s => io.observe(s));
 
     root.querySelector('#add-mode-btn')?.addEventListener('click', () => {
       this._addingMode = true;
       this._render();
       root.querySelector('#new-mode-input')?.focus();
     });
-
-    root.querySelector('#confirm-mode-btn')?.addEventListener('click', () => {
-      this._confirmAddMode();
-    });
-
+    root.querySelector('#confirm-mode-btn')?.addEventListener('click', () => this._confirmAddMode());
     root.querySelector('#cancel-mode-btn')?.addEventListener('click', () => {
-      this._addingMode = false;
-      this._render();
+      this._addingMode = false; this._render();
     });
-
-    root.querySelector('#new-mode-input')?.addEventListener('keydown', (e) => {
+    root.querySelector('#new-mode-input')?.addEventListener('keydown', e => {
       if (e.key === 'Enter') this._confirmAddMode();
       if (e.key === 'Escape') { this._addingMode = false; this._render(); }
     });
 
-    root.querySelector('#add-btn')
-      .addEventListener('click', () => this._addRule());
+    root.querySelector('#save-btn').addEventListener('click', () => this._save());
 
-    root.querySelector('#save-btn')
-      .addEventListener('click', () => this._save());
-
+    root.querySelectorAll('.add-btn[data-mode]').forEach(btn =>
+      btn.addEventListener('click', () => this._addRule(btn.dataset.mode))
+    );
     root.querySelectorAll('.del-btn').forEach(btn =>
       btn.addEventListener('click', () => this._deleteRule(+btn.dataset.idx))
     );
-
     root.querySelectorAll('.up-btn').forEach(btn =>
       btn.addEventListener('click', () => this._moveRule(+btn.dataset.idx, -1))
     );
-
     root.querySelectorAll('.dn-btn').forEach(btn =>
       btn.addEventListener('click', () => this._moveRule(+btn.dataset.idx, +1))
     );
