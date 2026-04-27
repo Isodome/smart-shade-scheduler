@@ -420,17 +420,18 @@ class SmartShadesPanel extends HTMLElement {
         entry_id: this._cfg.entry_id,
         rules: this._rules,
       });
-      this._dirty = false;
-      this._error = null;
+      this._dirty  = false;
+      this._error  = null;
+      this._saving = false;
       // Reload so orphaned tabs clean up and input_select changes are reflected
       this._cfg = null;
       await this._load();
       return;
     } catch (e) {
-      this._error = `Save failed: ${e.message ?? e}`;
+      this._error  = `Save failed: ${e.message ?? e}`;
+      this._saving = false;
+      this._render();
     }
-    this._saving = false;
-    this._render();
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
