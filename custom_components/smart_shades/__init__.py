@@ -42,6 +42,8 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     # Re-init wipe tracker whenever options change (e.g. wipe_time updated)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+
     # One-time domain-level setup (panel + WS commands + service)
     if not hass.data[DOMAIN].get("_panel"):
         try:
@@ -69,6 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
     """Unload a config entry."""
+    await hass.config_entries.async_unload_platforms(entry, ["sensor"])
     manager: ShadeManager | None = hass.data[DOMAIN].pop(entry.entry_id, None)
     if manager:
         manager.unload()
@@ -113,6 +116,7 @@ class ShadeManager:
         self._wipe_unsub = None
         self._mode_unsub = None
         self._eval_lock = asyncio.Lock()
+        self._listeners: list = []
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -184,6 +188,17 @@ class ShadeManager:
     # Public API
     # ------------------------------------------------------------------
 
+    def register_listener(self, cb) -> None:
+        self._listeners.append(cb)
+
+    def unregister_listener(self, cb) -> None:
+        self._listeners.remove(cb)
+
+    @callback
+    def _notify(self) -> None:
+        for cb in self._listeners:
+            cb()
+
     def clear_overrides(self, entity_id: str | None = None) -> None:
         """Clear one or all manual overrides."""
         if entity_id:
@@ -193,6 +208,7 @@ class ShadeManager:
             self._overrides.clear()
             self._last_commanded.clear()
         _LOGGER.info("Overrides cleared for %s", entity_id or "all covers")
+        self._notify()
 
     @property
     def active_overrides(self) -> dict[str, datetime]:
@@ -223,6 +239,7 @@ class ShadeManager:
         _LOGGER.info("Daily wipe: clearing all overrides and command history")
         self._overrides.clear()
         self._last_commanded.clear()
+        self._notify()
 
     # ------------------------------------------------------------------
     # Core logic
@@ -376,6 +393,8 @@ class ShadeManager:
                 entity_id, target_pos, target_tilt,
                 tolerance, cur_pos, cur_tilt,
             )
+
+        self._notify()
 
     async def _control_shade(
         self,
