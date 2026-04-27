@@ -510,8 +510,13 @@ class SmartShadesPanel extends HTMLElement {
 
       <div class="footer">
         <span class="hint">
-          Conditions: <code>az&gt;150</code> <code>el&gt;5</code> <code>el&lt;30</code>
-          <code>h&gt;8</code> <code>h&lt;22</code> <code>m&gt;30</code> — space-separated, empty = catch-all.<br>
+          Conditions (space-separated, empty = catch-all):<br>
+          <code>az&gt;150</code> azimuth above &nbsp;
+          <code>el&gt;5</code> elevation above &nbsp;
+          <code>el&lt;30</code> elevation below &nbsp;
+          <code>h&gt;8</code> hour after 8 &nbsp;
+          <code>h&lt;22</code> hour before 22 &nbsp;
+          <code>m&gt;30</code> minute after 30<br>
           First matching rule wins per cover. ⚠ = manual override active.
         </span>
         <button class="save-btn" id="save-btn" ${this._saving ? 'disabled' : ''}>
