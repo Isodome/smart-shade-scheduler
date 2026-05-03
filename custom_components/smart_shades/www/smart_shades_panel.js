@@ -2,53 +2,73 @@
  * Smart Shade Scheduler — sidebar panel
  *
  * Condition tokens (space-separated, case-insensitive):
- *   az>150   azimuth above 150°       el<30  elevation below 30°
- *   el>5     elevation above 5°       h>8    hour of day > 8 (0-23)
- *   h<22     hour of day < 22         m>30   minute > 30
- *   (empty)  catch-all — always matches
+ *   az>150  az>=150  az<200  az<=200  az==180   azimuth
+ *   el>5    el>=5    el<30   el<=30   el==10    elevation
+ *   h>8     h>=8     h<22    h<=22    h==8      hour (0-23)
+ *   m>30    m>=30    m<45    m<=45    m==0      minute
+ *   mo>=6   mo<=8    mo==12                     month (1-12)
+ *   home    away                                presence (requires presence entity)
+ *   (empty) catch-all — always matches
  */
 
+// To add a new variable: one entry in _VARS (token regex → field prefix).
+// To add a new operator: one entry in _OPS (symbol → field suffix).
+// mo must appear before m in the regex alternation to avoid mis-parsing.
+// Spaces are stripped before parsing so "az > 150" and "az>150" are identical.
+const _TOKEN_RE = /(az(?:imuth)?|el(?:evation)?|mo(?:n(?:th)?)?|h(?:our)?|m(?:in(?:ute)?)?)(>=|<=|==|>|<)(-?\d+(?:\.\d+)?)/gi;
+
+const _VARS = [
+  [/^az/i,  'azimuth'],
+  [/^el/i,  'elevation'],
+  [/^mo/i,  'month'],
+  [/^h/i,   'hour'],
+  [/^m/i,   'minute'],
+];
+const _OPS = { '>': 'above', '<': 'below', '>=': 'min', '<=': 'max', '==': 'eq' };
+const _FMT = { above: '>', below: '<', min: '>=', max: '<=', eq: '==' };
+
+function _varName(raw) {
+  for (const [re, name] of _VARS) if (re.test(raw)) return name;
+}
+
 function parseCondition(str) {
+  const clean = str.replace(/\s+/g, '');
   const result = {};
-  for (const token of str.trim().split(/\s+/)) {
-    const m = token.match(
-      /^(az(?:imuth)?|el(?:evation)?|h(?:our)?|m(?:in(?:ute)?)?)(>|<)(-?\d+(?:\.\d+)?)$/i
-    );
-    if (!m) continue;
-    const [, key, op, val] = m;
-    const v = parseFloat(val);
-    const k = key[0].toLowerCase();
-    if      (k === 'a' && op === '>') result.azimuth_above   = v;
-    else if (k === 'e' && op === '>') result.elevation_above = v;
-    else if (k === 'e' && op === '<') result.elevation_below = v;
-    else if (k === 'h' && op === '>') result.hour_above      = v;
-    else if (k === 'h' && op === '<') result.hour_below      = v;
-    else if (k === 'm' && op === '>') result.minute_above    = v;
-    else if (k === 'm' && op === '<') result.minute_below    = v;
-  }
+  for (const [, rawVar, rawOp, val] of clean.matchAll(_TOKEN_RE))
+    result[`${_varName(rawVar)}_${_OPS[rawOp]}`] = parseFloat(val);
+  // bare presence tokens — check original space-separated tokens
+  const tokens = str.trim().split(/\s+/);
+  if (tokens.some(t => /^home$/i.test(t))) result.require_home = true;
+  if (tokens.some(t => /^away$/i.test(t))) result.require_away = true;
   return result;
 }
 
 /** Returns {ok: bool, bad: string[]} */
 function validateCondition(str) {
   if (!str.trim()) return { ok: true, bad: [] };
-  const bad = str.trim().split(/\s+/).filter(token =>
-    !token.match(/^(az(?:imuth)?|el(?:evation)?|h(?:our)?|m(?:in(?:ute)?)?)(>|<)-?\d+(?:\.\d+)?$/i)
-  );
-  return { ok: bad.length === 0, bad };
+  const remaining = str.replace(/\s+/g, '').replace(_TOKEN_RE, '').replace(/home|away/gi, '');
+  return remaining ? { ok: false, bad: [remaining] } : { ok: true, bad: [] };
 }
+
+const _TOKEN = { azimuth: 'az', elevation: 'el', month: 'mo', hour: 'h', minute: 'm' };
 
 function formatCondition(rule) {
   const parts = [];
-  if (rule.azimuth_above   != null) parts.push(`az>${rule.azimuth_above}`);
-  if (rule.elevation_above != null) parts.push(`el>${rule.elevation_above}`);
-  if (rule.elevation_below != null) parts.push(`el<${rule.elevation_below}`);
-  if (rule.hour_above      != null) parts.push(`h>${rule.hour_above}`);
-  if (rule.hour_below      != null) parts.push(`h<${rule.hour_below}`);
-  if (rule.minute_above    != null) parts.push(`m>${rule.minute_above}`);
-  if (rule.minute_below    != null) parts.push(`m<${rule.minute_below}`);
+  if (rule.require_home) parts.push('home');
+  if (rule.require_away) parts.push('away');
+  for (const [, varName] of _VARS)
+    for (const [suffix, opStr] of Object.entries(_FMT)) {
+      const v = rule[`${varName}_${suffix}`];
+      if (v != null) parts.push(`${_TOKEN[varName]}${opStr}${v}`);
+    }
   return parts.join(' ');
 }
+
+// Auto-generated from _VARS × _OPS plus bare presence tokens.
+const CONDITION_KEYS = [
+  'require_home', 'require_away',
+  ..._VARS.flatMap(([, name]) => Object.values(_OPS).map(suffix => `${name}_${suffix}`)),
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -222,7 +242,7 @@ const CSS = `
   .chip {
     display: inline-flex; align-items: center; gap: 3px;
     background: var(--primary-color); color: var(--text-primary-color, #fff);
-    border-radius: 12px; padding: 2px 6px 2px 8px; font-size: 11px;
+    border-radius: 12px; padding: 2px 6px 2px 8px; font-size: 13px;
     white-space: nowrap;
   }
   .chip-rm {
@@ -373,9 +393,7 @@ class SmartShadesPanel extends HTMLElement {
         : [];
 
       const cond = parseCondition(row.querySelector('.f-cond').value);
-      for (const k of ['azimuth_above','elevation_above','elevation_below',
-                        'hour_above','hour_below','minute_above','minute_below'])
-        delete rule[k];
+      for (const k of CONDITION_KEYS) delete rule[k];
       Object.assign(rule, cond);
 
       const pos = row.querySelector('.f-pos').value;
@@ -432,13 +450,11 @@ class SmartShadesPanel extends HTMLElement {
     this._saving = true;
     this._render();
     try {
-      const conditionKeys = ['azimuth_above','elevation_above','elevation_below',
-        'hour_above','hour_below','minute_above','minute_below'];
       const rules = this._rules.filter(r =>
         (r.covers && r.covers.length > 0) ||
         r.position != null ||
         r.tilt != null ||
-        conditionKeys.some(k => r[k] != null)
+        CONDITION_KEYS.some(k => r[k] != null)
       );
       await this._ws('smart_shades/save_rules', {
         entry_id: this._cfg.entry_id,
@@ -478,7 +494,7 @@ class SmartShadesPanel extends HTMLElement {
     // ── Mode tabs ─────────────────────────────────────────────────
     const MODE_LABELS = {
       '_priority': '↑ Priority',
-      '_fallback': '↓ Fallback',
+      '_fallback': '↓ Default',
     };
     const MODE_TITLES = {
       '_priority': 'Evaluated before all mode rules — overrides everything',
@@ -513,11 +529,9 @@ class SmartShadesPanel extends HTMLElement {
 
       const rowsHtml = peers.map(({ r, i }, pos) => {
         const hasOv = (r.covers || []).some(c => overrides.has(c));
-        const _condKeys = ['azimuth_above','elevation_above','elevation_below',
-          'hour_above','hour_below','minute_above','minute_below'];
         const hasContent = (r.covers && r.covers.length > 0) ||
           r.position != null || r.tilt != null ||
-          _condKeys.some(k => r[k] != null);
+          CONDITION_KEYS.some(k => r[k] != null);
         const isInvalid = hasContent && r.position == null && r.tilt == null;
         const rowClass = hasOv ? 'has-override' : isInvalid ? 'row-invalid' : '';
         return `
@@ -610,15 +624,15 @@ class SmartShadesPanel extends HTMLElement {
       <div class="footer">
         <span class="hint">
           Conditions (space-separated, empty = catch-all):<br>
-          <code>az&gt;150</code> azimuth above &nbsp;
-          <code>el&gt;5</code> elevation above &nbsp;
-          <code>el&lt;30</code> elevation below &nbsp;
-          <code>h&gt;8</code> hour after 8 &nbsp;
-          <code>h&lt;22</code> hour before 22 &nbsp;
-          <code>m&gt;30</code> minute after 30<br>
+          <code>az&gt;150</code> <code>az&gt;=150</code> <code>az==180</code> azimuth &nbsp;
+          <code>el&gt;5</code> <code>el&lt;30</code> elevation &nbsp;
+          <code>h&gt;=8</code> <code>h&lt;22</code> <code>h==8</code> hour &nbsp;
+          <code>m&gt;30</code> minute &nbsp;
+          <code>mo&gt;=6</code> <code>mo&lt;=8</code> month (1–12) &nbsp;
+          <code>home</code> <code>away</code> presence<br>
           First matching rule wins per cover. ⚠ = manual override active.<br>
           <strong>↑ Priority</strong> rules are evaluated before all mode rules and override everything. &nbsp;
-          <strong>↓ Fallback</strong> rules are evaluated only when no rule in the current mode matched a cover.
+          <strong>↓ Default</strong> rules are evaluated only when no rule in the current mode matched a cover.
         </span>
         <button class="save-btn" id="save-btn" ${this._saving ? 'disabled' : ''}>
           ${this._saving ? 'Saving…' : 'Save'}
@@ -745,8 +759,11 @@ class SmartShadesPanel extends HTMLElement {
     // ── Helpers link ───────────────────────────────────────────────
     root.querySelector('#helpers-link')?.addEventListener('click', e => {
       e.preventDefault();
-      history.pushState(null, '', '/config/helpers');
-      window.dispatchEvent(new CustomEvent('location-changed'));
+      const entity = this._cfg?.mode_entity;
+      if (entity) {
+        history.pushState(null, '', `/?more-info-entity-id=${entity}`);
+        window.dispatchEvent(new CustomEvent('location-changed'));
+      }
     });
   }
 }

@@ -6,7 +6,8 @@
       "Bash(ssh root@192.168.88.253 \"find *\")",
       "Bash(ssh root@192.168.88.253 \"cat *\")",
       "Bash(ssh root@192.168.88.253 \"ls *\")",
-      "Bash(ssh root@192.168.88.253 \"journalctl *\")"
+      "Bash(ssh root@192.168.88.253 \"journalctl *\")",
+      "Bash(.venv/bin/pytest tests/ -v)"
     ]
   }
 }

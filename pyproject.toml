@@ -1,0 +1,11 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["custom_components/smart_shades"]
+omit = ["*/panel.py"]  # panel.py requires HA HTTP stack
+
+[tool.coverage.report]
+show_missing = true

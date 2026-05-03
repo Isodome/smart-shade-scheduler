@@ -7,12 +7,14 @@
         "data": {
           "mode_entity": "Mode entity (input_select)",
           "dnd_entity": "Do-not-disturb sensor (optional)",
-          "override_duration_entity": "Override duration entity (optional)"
+          "override_duration_entity": "Override duration entity (optional)",
+          "presence_entity": "Presence entity (optional)"
         },
         "data_description": {
           "mode_entity": "The input_select whose options define your automation modes.",
           "dnd_entity": "A binary_sensor that is `on` when automation should pause. Overrides the time-based DND window.",
-          "override_duration_entity": "An input_number (in hours) controlling how long manual overrides last. Overrides the built-in 4-hour default."
+          "override_duration_entity": "An input_number (in hours) controlling how long manual overrides last. Overrides the built-in 4-hour default.",
+          "presence_entity": "A zone, binary_sensor, person, or device_tracker entity used to evaluate `home`/`away` conditions in rules."
         }
       }
     },

@@ -12,12 +12,14 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
+from .logic import evaluate_rules, fill_targets, is_dnd_active, rule_matches
 from .const import (
     CONF_DND_END,
     CONF_DND_ENTITY,
     CONF_DND_START,
     CONF_MODE_ENTITY,
     CONF_OVERRIDE_DURATION_ENTITY,
+    CONF_PRESENCE_ENTITY,
     CONF_RULES,
     CONF_TOLERANCE,
     CONF_WIPE_TIME,
@@ -95,11 +97,12 @@ async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
 
 
 async def _async_options_updated(hass: HomeAssistant, entry) -> None:
-    """Re-init time/mode listeners whenever options are saved."""
+    """Re-init listeners and immediately apply the new rules."""
     manager: ShadeManager | None = hass.data[DOMAIN].get(entry.entry_id)
     if manager:
         manager.reinit_wipe_tracker()
         manager.reinit_mode_listener()
+        await manager.async_evaluate_rules()
 
 
 # ---------------------------------------------------------------------------
@@ -264,19 +267,8 @@ class ShadeManager:
                 return state.state == "on"
 
         start_str = self._opt(CONF_DND_START, DEFAULT_DND_START)
-        end_str = self._opt(CONF_DND_END, DEFAULT_DND_END)
-        try:
-            now = datetime.now().time()
-            start_parts = list(map(int, start_str.split(":")))
-            end_parts = list(map(int, end_str.split(":")))
-            start = time(*start_parts)
-            end = time(*end_parts)
-            if start <= end:
-                return start <= now <= end
-            # Overnight window (e.g. 22:00 – 07:00)
-            return now >= start or now <= end
-        except Exception:
-            return False
+        end_str   = self._opt(CONF_DND_END,   DEFAULT_DND_END)
+        return is_dnd_active(start_str, end_str, datetime.now().time())
 
     def _override_duration(self) -> timedelta:
         entity = self.entry.data.get(CONF_OVERRIDE_DURATION_ENTITY)
@@ -292,57 +284,30 @@ class ShadeManager:
     def _tolerance(self) -> int:
         return int(self._opt(CONF_TOLERANCE, DEFAULT_TOLERANCE))
 
+    def _presence(self) -> bool | None:
+        entity = self.entry.data.get(CONF_PRESENCE_ENTITY)
+        if not entity:
+            return None
+        state = self.hass.states.get(entity)
+        if not state:
+            return None
+        if entity.startswith("zone."):
+            try:
+                return int(state.state) > 0
+            except (ValueError, TypeError):
+                return None
+        if entity.startswith("binary_sensor."):
+            return state.state == "on"
+        return state.state == "home"  # person.*, device_tracker.*
+
     async def async_evaluate_rules(self) -> None:
         """Evaluate rules, moving covers as needed. Skips overridden covers."""
         async with self._eval_lock:
             await self._do_evaluate()
 
-    @staticmethod
-    def _rule_matches(
-        rule: dict,
-        azimuth: float,
-        elevation: float,
-        hour: int,
-        minute: int,
-    ) -> bool:
-        def _ok(key, val, op):
-            v = rule.get(key)
-            return v is None or op(val, v)
-
-        return (
-            _ok("azimuth_above",   azimuth,   float.__gt__)
-            and _ok("elevation_above", elevation, float.__gt__)
-            and _ok("elevation_below", elevation, float.__lt__)
-            and _ok("hour_above",   hour,   int.__gt__)
-            and _ok("hour_below",   hour,   int.__lt__)
-            and _ok("minute_above", minute, int.__gt__)
-            and _ok("minute_below", minute, int.__lt__)
-        )
-
-    @staticmethod
-    def _fill_targets(
-        mode: str,
-        rules: list,
-        targets: dict,
-        azimuth: float,
-        elevation: float,
-        hour: int,
-        minute: int,
-    ) -> None:
-        """Apply first-matching rules for `mode` to covers not yet targeted."""
-        for rule in rules:
-            if rule.get("mode") != mode:
-                continue
-            if not ShadeManager._rule_matches(
-                rule, azimuth, elevation, hour, minute
-            ):
-                continue
-            for cover in rule.get("covers", []):
-                if cover not in targets:
-                    targets[cover] = {
-                        "p": rule.get("position"),
-                        "t": rule.get("tilt"),
-                    }
+    # Delegate to logic.py (pure, unit-testable)
+    _rule_matches  = staticmethod(rule_matches)
+    _fill_targets  = staticmethod(fill_targets)
 
     async def _do_evaluate(self) -> None:
         if self._is_dnd_active():
@@ -363,15 +328,11 @@ class ShadeManager:
         now = datetime.now()
 
         rules = self.entry.options.get(CONF_RULES, [])
-        hour, minute = now.hour, now.minute
-        ctx = (azimuth, elevation, hour, minute)
+        hour, minute, month = now.hour, now.minute, now.month
+        presence = self._presence()
+        ctx = (azimuth, elevation, hour, minute, month)
 
-        # 3-pass: priority → current mode → fallback
-        shade_targets: dict[str, dict] = {}
-        self._fill_targets(PRIORITY_MODE, rules, shade_targets, *ctx)
-        if current_mode:
-            self._fill_targets(current_mode, rules, shade_targets, *ctx)
-        self._fill_targets(FALLBACK_MODE, rules, shade_targets, *ctx)
+        shade_targets = evaluate_rules(rules, current_mode, *ctx, presence)
 
         for entity_id, target in shade_targets.items():
             state = self.hass.states.get(entity_id)
@@ -459,17 +420,28 @@ class ShadeManager:
         if not needs_move and tilt is not None and cur_tilt is not None:
             needs_move = abs(int(cur_tilt) - tilt) > tolerance
 
+        # Always record the scheduled target so the divergence check can detect
+        # manual moves even when the cover was already at the right position
+        # and no service call was needed.
+        self._last_commanded[entity_id] = {"p": final_pos, "t": tilt}
+
         if not needs_move:
             return
 
-        # Record command so the divergence check can detect manual moves later
-        self._last_commanded[entity_id] = {"p": final_pos, "t": tilt}
-
         if final_pos is not None:
-            await self.hass.services.async_call(
-                "cover", "set_cover_position",
-                {"entity_id": entity_id, "position": final_pos},
-            )
+            if final_pos == 100:
+                await self.hass.services.async_call(
+                    "cover", "open_cover", {"entity_id": entity_id}
+                )
+            elif final_pos == 0:
+                await self.hass.services.async_call(
+                    "cover", "close_cover", {"entity_id": entity_id}
+                )
+            else:
+                await self.hass.services.async_call(
+                    "cover", "set_cover_position",
+                    {"entity_id": entity_id, "position": final_pos},
+                )
         if tilt is not None:
             await self.hass.services.async_call(
                 "cover", "set_cover_tilt_position",
