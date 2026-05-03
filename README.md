@@ -28,8 +28,7 @@ Each rule optionally specifies conditions (space-separated tokens). All six comp
 |---|---|
 | `az>150` / `az>=150` / `az<200` / `az<=200` / `az==180` | Sun azimuth |
 | `el>5` / `el>=5` / `el<30` / `el<=30` / `el==10` | Sun elevation |
-| `h>8` / `h>=8` / `h<22` / `h<=22` / `h==8` | Hour of day (0–23) |
-| `m>30` / `m>=30` / `m<45` / `m<=45` / `m==0` | Minute (0–59) |
+| `t>8:00` / `t>=8:00` / `t<22:00` / `t<=22:00` / `t==8:30` | Time of day |
 | `home` | Only matches when someone is home |
 | `away` | Only matches when nobody is home |
 

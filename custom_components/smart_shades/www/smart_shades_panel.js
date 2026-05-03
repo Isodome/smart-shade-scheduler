@@ -4,8 +4,7 @@
  * Condition tokens (space-separated, case-insensitive):
  *   az>150  az>=150  az<200  az<=200  az==180   azimuth
  *   el>5    el>=5    el<30   el<=30   el==10    elevation
- *   h>8     h>=8     h<22    h<=22    h==8      hour (0-23)
- *   m>30    m>=30    m<45    m<=45    m==0      minute
+ *   t>8:30  t>=8:30  t<22:00 t<=22:00 t==8:00   time (HH:MM)
  *   mo>=6   mo<=8    mo==12                     month (1-12)
  *   home    away                                presence (requires presence entity)
  *   (empty) catch-all — always matches
@@ -15,14 +14,13 @@
 // To add a new operator: one entry in _OPS (symbol → field suffix).
 // mo must appear before m in the regex alternation to avoid mis-parsing.
 // Spaces are stripped before parsing so "az > 150" and "az>150" are identical.
-const _TOKEN_RE = /(az(?:imuth)?|el(?:evation)?|mo(?:n(?:th)?)?|h(?:our)?|m(?:in(?:ute)?)?)(>=|<=|==|>|<)(-?\d+(?:\.\d+)?)/gi;
+const _TOKEN_RE = /(az(?:imuth)?|el(?:evation)?|mo(?:n(?:th)?)?|t(?:ime)?)(>=|<=|==|>|<)(-?\d+(?::\d+)?(?:\.\d+)?)/gi;
 
 const _VARS = [
   [/^az/i,  'azimuth'],
   [/^el/i,  'elevation'],
   [/^mo/i,  'month'],
-  [/^h/i,   'hour'],
-  [/^m/i,   'minute'],
+  [/^t/i,   'time'],
 ];
 const _OPS = { '>': 'above', '<': 'below', '>=': 'min', '<=': 'max', '==': 'eq' };
 const _FMT = { above: '>', below: '<', min: '>=', max: '<=', eq: '==' };
@@ -35,7 +33,7 @@ function parseCondition(str) {
   const clean = str.replace(/\s+/g, '');
   const result = {};
   for (const [, rawVar, rawOp, val] of clean.matchAll(_TOKEN_RE))
-    result[`${_varName(rawVar)}_${_OPS[rawOp]}`] = parseFloat(val);
+    result[`${_varName(rawVar)}_${_OPS[rawOp]}`] = parseFloat(val.replace(':', ''));
   // bare presence tokens — check original space-separated tokens
   const tokens = str.trim().split(/\s+/);
   if (tokens.some(t => /^home$/i.test(t))) result.require_home = true;
@@ -50,7 +48,7 @@ function validateCondition(str) {
   return remaining ? { ok: false, bad: [remaining] } : { ok: true, bad: [] };
 }
 
-const _TOKEN = { azimuth: 'az', elevation: 'el', month: 'mo', hour: 'h', minute: 'm' };
+const _TOKEN = { azimuth: 'az', elevation: 'el', month: 'mo', time: 't' };
 
 function formatCondition(rule) {
   const parts = [];
@@ -58,8 +56,14 @@ function formatCondition(rule) {
   if (rule.require_away) parts.push('away');
   for (const [, varName] of _VARS)
     for (const [suffix, opStr] of Object.entries(_FMT)) {
-      const v = rule[`${varName}_${suffix}`];
-      if (v != null) parts.push(`${_TOKEN[varName]}${opStr}${v}`);
+      let v = rule[`${varName}_${suffix}`];
+      if (v != null) {
+        if (varName === 'time') {
+          const strV = String(v).padStart(3, '0');
+          v = strV.slice(0, -2) + ':' + strV.slice(-2);
+        }
+        parts.push(`${_TOKEN[varName]}${opStr}${v}`);
+      }
     }
   return parts.join(' ');
 }
@@ -626,8 +630,7 @@ class SmartShadesPanel extends HTMLElement {
           Conditions (space-separated, empty = catch-all):<br>
           <code>az&gt;150</code> <code>az&gt;=150</code> <code>az==180</code> azimuth &nbsp;
           <code>el&gt;5</code> <code>el&lt;30</code> elevation &nbsp;
-          <code>h&gt;=8</code> <code>h&lt;22</code> <code>h==8</code> hour &nbsp;
-          <code>m&gt;30</code> minute &nbsp;
+          <code>t&gt;=8:30</code> <code>t&lt;22:00</code> <code>t==8:00</code> time &nbsp;
           <code>mo&gt;=6</code> <code>mo&lt;=8</code> month (1–12) &nbsp;
           <code>home</code> <code>away</code> presence<br>
           First matching rule wins per cover. ⚠ = manual override active.<br>

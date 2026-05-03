@@ -329,8 +329,9 @@ class ShadeManager:
 
         rules = self.entry.options.get(CONF_RULES, [])
         hour, minute, month = now.hour, now.minute, now.month
+        time_hhmm = hour * 100 + minute
         presence = self._presence()
-        ctx = (azimuth, elevation, hour, minute, month)
+        ctx = (azimuth, elevation, time_hhmm, month)
 
         shade_targets = evaluate_rules(rules, current_mode, *ctx, presence)
 

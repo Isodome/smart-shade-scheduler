@@ -8,7 +8,9 @@ MORN = dict(azimuth=90.0,  elevation=20.0, hour=8,  minute=0)
 
 def m(rule, **kwargs):
     ctx = {**SUN, **kwargs}
-    return rule_matches(rule, ctx["azimuth"], ctx["elevation"], ctx["hour"], ctx["minute"])
+    time_hhmm = ctx["hour"] * 100 + ctx["minute"]
+    month = ctx.get("month", 1)
+    return rule_matches(rule, ctx["azimuth"], ctx["elevation"], time_hhmm, month)
 
 
 # ── Empty rule (catch-all) ────────────────────────────────────────────────────
@@ -79,66 +81,50 @@ def test_night_rule():
     assert not m({"elevation_below": 0}, elevation=1)
 
 
-# ── Hour ──────────────────────────────────────────────────────────────────────
+# ── Time ──────────────────────────────────────────────────────────────────────
 
-def test_hour_above():
-    assert not m({"hour_above": 8}, **MORN)   # h=8, 8 > 8 is False
-    assert     m({"hour_above": 7}, **MORN)   # h=8, 8 > 7 is True
-    assert not m({"hour_above": 9}, **MORN)   # h=8, 8 > 9 is False
+def test_time_above():
+    assert not m({"time_above": 800}, **MORN)   # t=800, 800 > 800 is False
+    assert     m({"time_above": 700}, **MORN)   # t=800, 800 > 700 is True
+    assert not m({"time_above": 900}, **MORN)   # t=800, 800 > 900 is False
 
-def test_hour_below():
-    assert     m({"hour_below": 9},  **MORN)
-    assert not m({"hour_below": 8},  **MORN)   # 8 is not < 8
+def test_time_below():
+    assert     m({"time_below": 900},  **MORN)
+    assert not m({"time_below": 800},  **MORN)   # 800 is not < 800
 
-def test_hour_min():
-    assert     m({"hour_min": 8},    **MORN)   # 8 >= 8
-    assert not m({"hour_min": 9},    **MORN)
+def test_time_min():
+    assert     m({"time_min": 800},    **MORN)   # 800 >= 800
+    assert not m({"time_min": 900},    **MORN)
 
-def test_hour_max():
-    assert     m({"hour_max": 8},    **MORN)   # 8 <= 8
-    assert not m({"hour_max": 7},    **MORN)
+def test_time_max():
+    assert     m({"time_max": 800},    **MORN)   # 800 <= 800
+    assert not m({"time_max": 700},    **MORN)
 
-def test_hour_eq():
-    assert     m({"hour_eq": 8},     **MORN)
-    assert not m({"hour_eq": 9},     **MORN)
+def test_time_eq():
+    assert     m({"time_eq": 800},     **MORN)
+    assert not m({"time_eq": 900},     **MORN)
 
-def test_hour_window():
-    # h>=8 h<=10 should match h=8,9,10 but not 7 or 11
-    rule = {"hour_min": 8, "hour_max": 10}
+def test_time_window():
+    # t>=800 t<=1000 should match t=800,900,1000 but not 700 or 1100
+    rule = {"time_min": 800, "time_max": 1000}
     assert     m(rule, **{**MORN, "hour": 8})
     assert     m(rule, **{**MORN, "hour": 10})
     assert not m(rule, **{**MORN, "hour": 7})
     assert not m(rule, **{**MORN, "hour": 11})
 
-
-# ── Minute ────────────────────────────────────────────────────────────────────
-
-def test_minute_above():
-    assert     m({"minute_above": 29})
-    assert not m({"minute_above": 30})   # 30 is not > 30
-
-def test_minute_below():
-    assert     m({"minute_below": 31})
-    assert not m({"minute_below": 30})   # 30 is not < 30
-
-def test_minute_min():
-    assert     m({"minute_min": 30})    # 30 >= 30
-    assert not m({"minute_min": 31})
-
-def test_minute_max():
-    assert     m({"minute_max": 30})    # 30 <= 30
-    assert not m({"minute_max": 29})
-
-def test_minute_eq():
-    assert     m({"minute_eq": 30})
-    assert not m({"minute_eq": 0})
+def test_time_minutes():
+    # SUN has hour=14, minute=30 -> 1430
+    assert     m({"time_above": 1429})
+    assert not m({"time_above": 1430})
+    assert     m({"time_below": 1431})
+    assert not m({"time_below": 1430})
 
 
 # ── Combined conditions (AND semantics) ───────────────────────────────────────
 
 def test_combined_sun_and_time():
-    rule = {"azimuth_above": 185, "elevation_above": 5, "hour_above": 12}
+    rule = {"azimuth_above": 185, "elevation_above": 5, "time_above": 1200}
     assert     m(rule)                           # az=200, el=10, h=14 → all pass
     assert not m(rule, azimuth=180)              # az fails
     assert not m(rule, elevation=3)              # el fails
-    assert not m(rule, hour=10)                  # h fails
+    assert not m(rule, hour=10)                  # time fails
