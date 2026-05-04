@@ -3,29 +3,26 @@
 import operator
 from datetime import time
 
-# To add a new condition variable, add one entry here.
-_VARS = ("azimuth", "elevation", "time", "month")
-
-# To add a new operator, add one entry here.
-_OPS = (
-    ("above", operator.gt),
-    ("below", operator.lt),
-    ("min",   operator.ge),
-    ("max",   operator.le),
-    ("eq",    operator.eq),
-)
+_OPS = {
+    ">":  operator.gt,
+    "<":  operator.lt,
+    ">=": operator.ge,
+    "<=": operator.le,
+    "==": operator.eq,
+}
 
 
 def rule_matches(
-    rule: dict,
+    conditions: list,
     azimuth: float,
     elevation: float,
     time_hhmm: int,
     month: int = 1,
     presence: bool | None = None,
 ) -> bool:
-    """Return True if all conditions in *rule* are satisfied.
+    """Return True if all conditions are satisfied.
 
+    conditions is a list of {"var": str, "op": str, "val": number|str}.
     time_hhmm is hour*100 + minute (e.g. 19:30 → 1930).
     """
     vals = {
@@ -35,28 +32,30 @@ def rule_matches(
         "month":     month,
     }
 
-    def _ok(key, val, op):
-        v = rule.get(key)
-        return v is None or op(val, v)
+    for cond in conditions:
+        var     = cond.get("var")
+        op_str  = cond.get("op")
+        expected = cond.get("val")
 
-    if not all(
-        _ok(f"{var}_{suffix}", vals[var], op)
-        for var in _VARS
-        for suffix, op in _OPS
-    ):
-        return False
+        if var == "presence":
+            if expected == "home" and presence is not True:
+                return False
+            if expected == "away" and presence is not False:
+                return False
+            continue
 
-    if rule.get("require_home") and presence is not True:
-        return False
-    if rule.get("require_away") and presence is not False:
-        return False
+        if var not in vals or op_str not in _OPS:
+            continue  # unknown var/op — ignore silently
+
+        if not _OPS[op_str](vals[var], expected):
+            return False
 
     return True
 
 
 def fill_targets(
     mode: str,
-    rules: list,
+    groups: list,
     targets: dict,
     azimuth: float,
     elevation: float,
@@ -64,22 +63,27 @@ def fill_targets(
     month: int = 1,
     presence: bool | None = None,
 ) -> None:
-    """Apply first-matching rules for *mode* to covers not yet in *targets*."""
-    for rule in rules:
-        if rule.get("mode") != mode:
+    """Apply first-matching rule per group for *mode* to covers not yet in *targets*."""
+    for group in groups:
+        if group.get("mode") != mode:
             continue
-        if not rule_matches(rule, azimuth, elevation, time_hhmm, month, presence):
-            continue
-        for cover in rule.get("covers", []):
-            if cover not in targets:
-                targets[cover] = {
-                    "p": rule.get("position"),
-                    "t": rule.get("tilt"),
-                }
+        covers = group.get("covers", [])
+        for rule in group.get("rules", []):
+            if not rule_matches(rule.get("conditions", []), azimuth, elevation, time_hhmm, month, presence):
+                continue
+            action = rule.get("action", {})
+            p = action.get("position")
+            t = action.get("tilt")
+            if p is None and t is None:
+                continue  # no valid action — try next rule
+            for cover in covers:
+                if cover not in targets:
+                    targets[cover] = {"p": p, "t": t}
+            break  # first matching rule with valid action wins for this group
 
 
 def evaluate_rules(
-    rules: list,
+    groups: list,
     current_mode: str | None,
     azimuth: float,
     elevation: float,
@@ -92,10 +96,10 @@ def evaluate_rules(
     Returns: { entity_id: {"p": position_or_None, "t": tilt_or_None} }
     """
     targets: dict = {}
-    fill_targets("_priority",  rules, targets, azimuth, elevation, time_hhmm, month, presence)
+    fill_targets("_priority",  groups, targets, azimuth, elevation, time_hhmm, month, presence)
     if current_mode:
-        fill_targets(current_mode, rules, targets, azimuth, elevation, time_hhmm, month, presence)
-    fill_targets("_fallback",  rules, targets, azimuth, elevation, time_hhmm, month, presence)
+        fill_targets(current_mode, groups, targets, azimuth, elevation, time_hhmm, month, presence)
+    fill_targets("_fallback",  groups, targets, azimuth, elevation, time_hhmm, month, presence)
     return targets
 
 

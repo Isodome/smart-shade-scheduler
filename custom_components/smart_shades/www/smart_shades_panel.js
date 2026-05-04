@@ -10,69 +10,7 @@
  *   (empty) catch-all — always matches
  */
 
-// To add a new variable: one entry in _VARS (token regex → field prefix).
-// To add a new operator: one entry in _OPS (symbol → field suffix).
-// mo must appear before m in the regex alternation to avoid mis-parsing.
-// Spaces are stripped before parsing so "az > 150" and "az>150" are identical.
-const _TOKEN_RE = /(az(?:imuth)?|el(?:evation)?|mo(?:n(?:th)?)?|t(?:ime)?)(>=|<=|==|>|<)(-?\d+(?::\d+)?(?:\.\d+)?)/gi;
-
-const _VARS = [
-  [/^az/i,  'azimuth'],
-  [/^el/i,  'elevation'],
-  [/^mo/i,  'month'],
-  [/^t/i,   'time'],
-];
-const _OPS = { '>': 'above', '<': 'below', '>=': 'min', '<=': 'max', '==': 'eq' };
-const _FMT = { above: '>', below: '<', min: '>=', max: '<=', eq: '==' };
-
-function _varName(raw) {
-  for (const [re, name] of _VARS) if (re.test(raw)) return name;
-}
-
-function parseCondition(str) {
-  const clean = str.replace(/\s+/g, '');
-  const result = {};
-  for (const [, rawVar, rawOp, val] of clean.matchAll(_TOKEN_RE))
-    result[`${_varName(rawVar)}_${_OPS[rawOp]}`] = parseFloat(val.replace(':', ''));
-  // bare presence tokens — check original space-separated tokens
-  const tokens = str.trim().split(/\s+/);
-  if (tokens.some(t => /^home$/i.test(t))) result.require_home = true;
-  if (tokens.some(t => /^away$/i.test(t))) result.require_away = true;
-  return result;
-}
-
-/** Returns {ok: bool, bad: string[]} */
-function validateCondition(str) {
-  if (!str.trim()) return { ok: true, bad: [] };
-  const remaining = str.replace(/\s+/g, '').replace(_TOKEN_RE, '').replace(/home|away/gi, '');
-  return remaining ? { ok: false, bad: [remaining] } : { ok: true, bad: [] };
-}
-
-const _TOKEN = { azimuth: 'az', elevation: 'el', month: 'mo', time: 't' };
-
-function formatCondition(rule) {
-  const parts = [];
-  if (rule.require_home) parts.push('home');
-  if (rule.require_away) parts.push('away');
-  for (const [, varName] of _VARS)
-    for (const [suffix, opStr] of Object.entries(_FMT)) {
-      let v = rule[`${varName}_${suffix}`];
-      if (v != null) {
-        if (varName === 'time') {
-          const strV = String(v).padStart(3, '0');
-          v = strV.slice(0, -2) + ':' + strV.slice(-2);
-        }
-        parts.push(`${_TOKEN[varName]}${opStr}${v}`);
-      }
-    }
-  return parts.join(' ');
-}
-
-// Auto-generated from _VARS × _OPS plus bare presence tokens.
-const CONDITION_KEYS = [
-  'require_home', 'require_away',
-  ..._VARS.flatMap(([, name]) => Object.values(_OPS).map(suffix => `${name}_${suffix}`)),
-];
+import { parseCondition, validateCondition, formatCondition } from './conditions.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -171,11 +109,12 @@ const CSS = `
   }
 
   /* ── Card / table ──────────────────────────────────── */
-  .card {
+  .table-card {
     background: var(--card-background-color);
     border-radius: 12px;
     box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,.12));
     overflow: hidden;
+    margin-bottom: 12px;
   }
   table { width: 100%; border-collapse: collapse; }
   thead th {
@@ -187,6 +126,18 @@ const CSS = `
     color: var(--secondary-text-color);
     background: var(--secondary-background-color, rgba(0,0,0,.04));
     border-bottom: 1px solid var(--divider-color);
+  }
+  tbody.cover-group {
+    border-bottom: 3px solid var(--divider-color);
+  }
+  tbody.cover-group:last-child {
+    border-bottom: none;
+  }
+  td.covers-cell {
+    vertical-align: top;
+    background: rgba(0,0,0,.015);
+    border-right: 1px solid var(--divider-color);
+    padding: 10px;
   }
   tbody td {
     padding: 5px 8px;
@@ -238,7 +189,7 @@ const CSS = `
   .icon-btn:hover { background: var(--secondary-background-color); color: var(--primary-text-color); }
   .icon-btn:disabled { opacity: .25; cursor: default; }
   .icon-btn.del:hover { background: var(--error-color, #b00020); color: #fff; }
-  .override-icon { color: #ff9800; cursor: default; font-size: 14px; }
+  .override-icon { color: #ff9800; cursor: default; font-size: 14px; margin-left: 4px; }
 
   /* ── Cover chip picker ─────────────────────────────── */
   .cover-picker { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
@@ -279,9 +230,9 @@ const CSS = `
   }
   .helpers-link:hover { opacity: 1; text-decoration: underline; }
 
-  /* ── Add row ───────────────────────────────────────── */
+  /* ── Add buttons ───────────────────────────────────── */
   .add-row td { padding: 0; }
-  .add-btn {
+  .add-rule-btn {
     display: block;
     width: 100%;
     padding: 10px 14px;
@@ -293,7 +244,25 @@ const CSS = `
     text-align: left;
     cursor: pointer;
   }
-  .add-btn:hover { background: var(--secondary-background-color); }
+  .add-rule-btn:hover { background: var(--secondary-background-color); }
+  
+  .add-group-btn {
+    display: inline-block;
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-bottom: 24px;
+    transition: background .15s, color .15s;
+  }
+  .add-group-btn:hover {
+    background: var(--primary-color);
+    color: var(--text-primary-color, #fff);
+  }
 
   /* ── Footer ────────────────────────────────────────── */
   .footer {
@@ -303,6 +272,67 @@ const CSS = `
     margin-top: 14px;
     flex-wrap: wrap;
     gap: 8px;
+  }
+  .secondary-btn {
+    padding: 8px 14px;
+    background: transparent;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .secondary-btn:hover {
+    background: var(--primary-color);
+    color: var(--text-primary-color, #fff);
+  }
+  .tools-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  dialog {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+    padding: 24px;
+    background: var(--primary-background-color);
+    color: var(--primary-text-color);
+    width: 90%;
+    max-width: 600px;
+  }
+  dialog::backdrop {
+    background: rgba(0,0,0,0.5);
+  }
+  .dialog-title {
+    margin: 0 0 16px 0;
+    font-size: 18px;
+    font-weight: 500;
+  }
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  textarea.dialog-textarea {
+    width: 100%;
+    height: 300px;
+    padding: 12px;
+    border: 1px solid var(--divider-color);
+    border-radius: 8px;
+    background: var(--card-background-color);
+    color: var(--primary-text-color);
+    font-family: monospace;
+    font-size: 13px;
+    resize: vertical;
+  }
+  textarea.dialog-textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
   }
   .hint { font-size: 11px; color: var(--secondary-text-color); line-height: 1.6; }
   code {
@@ -341,7 +371,7 @@ class SmartShadesPanel extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._hass        = null;
     this._cfg         = null;   // data from ws_get_config
-    this._rules       = [];     // working copy
+    this._groups      = [];     // working copy of rule groups
     this._modes       = [];     // ordered mode tab list
     this._mode        = null;   // selected tab
     this._orphaned    = new Set();
@@ -351,7 +381,6 @@ class SmartShadesPanel extends HTMLElement {
     this._error       = null;
   }
 
-  // HA calls this every time any entity state changes — we only care on first set
   set hass(hass) {
     this._hass = hass;
     if (!this._cfg) this._load();
@@ -361,7 +390,7 @@ class SmartShadesPanel extends HTMLElement {
     try {
       const cfg = await this._ws('smart_shades/get_config');
       this._cfg      = cfg;
-      this._rules    = JSON.parse(JSON.stringify(cfg.rules || []));
+      this._groups   = JSON.parse(JSON.stringify(cfg.rules || []));
       this._modes    = cfg.mode_options || [];
       this._orphaned = new Set(cfg.orphaned_modes || []);
       this._special  = new Set(cfg.special_modes  || []);
@@ -382,30 +411,41 @@ class SmartShadesPanel extends HTMLElement {
 
   // ── Mutation helpers ──────────────────────────────────────────────────────
 
-  /** Read DOM row inputs back into this._rules[]. */
   _collect() {
     const root = this.shadowRoot;
-    for (const row of root.querySelectorAll('tr[data-idx]')) {
-      const idx  = parseInt(row.dataset.idx, 10);
-      const rule = this._rules[idx];
-      if (!rule) continue;
-
-      // covers come from the picker's data attribute (chips)
-      const picker = row.querySelector('.cover-picker');
-      rule.covers = picker
-        ? JSON.parse(picker.dataset.covers || '[]')
-        : [];
-
-      const cond = parseCondition(row.querySelector('.f-cond').value);
-      for (const k of CONDITION_KEYS) delete rule[k];
-      Object.assign(rule, cond);
-
-      const pos = row.querySelector('.f-pos').value;
-      if (pos !== '') rule.position = parseInt(pos, 10); else delete rule.position;
-
-      const tilt = row.querySelector('.f-tilt').value;
-      if (tilt !== '') rule.tilt = parseInt(tilt, 10); else delete rule.tilt;
+    const newGroups = [];
+    
+    // Maintain exact order from memory, just update properties from DOM where DOM exists
+    for (let gIdx = 0; gIdx < this._groups.length; gIdx++) {
+      const gObj = this._groups[gIdx];
+      const groupEl = root.querySelector(`tbody.cover-group[data-gidx="${gIdx}"]`);
+      if (!groupEl) {
+        newGroups.push(gObj); // Keep if not currently rendered (wrong tab)
+        continue;
+      }
+      
+      const picker = groupEl.querySelector('.cover-picker');
+      const covers = picker ? JSON.parse(picker.dataset.covers || '[]') : [];
+      
+      const rules = [];
+      for (const row of groupEl.querySelectorAll('tr.rule-row')) {
+        const condStr = row.querySelector('.f-cond').value;
+        const conditions = parseCondition(condStr);
+        
+        const action = {};
+        const pos = row.querySelector('.f-pos').value;
+        if (pos !== '') action.position = parseInt(pos, 10);
+        
+        const tilt = row.querySelector('.f-tilt').value;
+        if (tilt !== '') action.tilt = parseInt(tilt, 10);
+        
+        rules.push({ conditions, action });
+      }
+      
+      newGroups.push({ ...gObj, covers, rules });
     }
+    
+    this._groups = newGroups;
   }
 
   _coverPickerHtml(covers) {
@@ -422,28 +462,40 @@ class SmartShadesPanel extends HTMLElement {
     </div>`;
   }
 
-  _addRule(mode = this._mode) {
+  _addGroup(mode) {
     this._collect();
-    const n = this._rules.filter(r => r.mode === mode).length + 1;
-    this._rules.push({ name: `${mode} ${n}`, mode, covers: [] });
+    this._groups.push({ mode, covers: [], rules: [] });
     this._dirty = true;
     this._render();
   }
 
-  _deleteRule(idx) {
+  _deleteGroup(gIdx) {
     this._collect();
-    this._rules.splice(idx, 1);
+    this._groups.splice(gIdx, 1);
     this._dirty = true;
     this._render();
   }
 
-  _moveRule(idx, dir) {
+  _addRule(gIdx) {
     this._collect();
-    const peers = this._rulesForMode();
-    const pos   = peers.findIndex(p => p.i === idx);
-    const swap  = peers[pos + dir];
-    if (!swap) return;
-    [this._rules[idx], this._rules[swap.i]] = [this._rules[swap.i], this._rules[idx]];
+    if (!this._groups[gIdx].rules) this._groups[gIdx].rules = [];
+    this._groups[gIdx].rules.push({ conditions: [], action: {} });
+    this._dirty = true;
+    this._render();
+  }
+
+  _deleteRule(gIdx, rIdx) {
+    this._collect();
+    this._groups[gIdx].rules.splice(rIdx, 1);
+    this._dirty = true;
+    this._render();
+  }
+
+  _moveRule(gIdx, rIdx, dir) {
+    this._collect();
+    const rules = this._groups[gIdx].rules;
+    if (rIdx + dir < 0 || rIdx + dir >= rules.length) return;
+    [rules[rIdx], rules[rIdx + dir]] = [rules[rIdx + dir], rules[rIdx]];
     this._dirty = true;
     this._render();
   }
@@ -454,23 +506,27 @@ class SmartShadesPanel extends HTMLElement {
     this._saving = true;
     this._render();
     try {
-      const rules = this._rules.filter(r =>
-        (r.covers && r.covers.length > 0) ||
-        r.position != null ||
-        r.tilt != null ||
-        CONDITION_KEYS.some(k => r[k] != null)
-      );
+      const outGroups = [];
+      for (const g of this._groups) {
+        const validRules = (g.rules || []).filter(r => 
+          (r.action && r.action.position != null) || 
+          (r.action && r.action.tilt != null) || 
+          (r.conditions && r.conditions.length > 0)
+        );
+        if ((g.covers && g.covers.length > 0) || validRules.length > 0) {
+          outGroups.push({ ...g, rules: validRules });
+        }
+      }
+
       await this._ws('smart_shades/save_rules', {
         entry_id: this._cfg.entry_id,
-        rules,
+        rules: outGroups,
       });
       this._dirty  = false;
       this._error  = null;
       this._saving = false;
-      // Reload so orphaned tabs clean up and input_select changes are reflected
       this._cfg = null;
       await this._load();
-      return;
     } catch (e) {
       this._error  = `Save failed: ${e.message ?? e}`;
       this._saving = false;
@@ -495,11 +551,7 @@ class SmartShadesPanel extends HTMLElement {
     const curMode   = this._cfg.current_mode;
     const overrides = new Set(this._cfg.overrides || []);
 
-    // ── Mode tabs ─────────────────────────────────────────────────
-    const MODE_LABELS = {
-      '_priority': '↑ Priority',
-      '_fallback': '↓ Default',
-    };
+    const MODE_LABELS = { '_priority': '↑ Priority', '_fallback': '↓ Default' };
     const MODE_TITLES = {
       '_priority': 'Evaluated before all mode rules — overrides everything',
       '_fallback': 'Evaluated only when no mode rule matched a cover',
@@ -515,7 +567,7 @@ class SmartShadesPanel extends HTMLElement {
         special  ? 'special'  : '',
       ].filter(Boolean).join(' ');
       const title = special  ? MODE_TITLES[m]
-        : orphaned ? 'Not in input_select — removed when all rules deleted'
+        : orphaned ? 'Not in input_select — removed when all groups deleted'
         : m;
       return `<button class="${cls}" data-mode="${m}" title="${title}">
         ${MODE_LABELS[m] || m}
@@ -524,48 +576,90 @@ class SmartShadesPanel extends HTMLElement {
       </button>`;
     }).join('');
 
-
-    // ── One section per mode ───────────────────────────────────────
     const sectionsHtml = this._modes.map(mode => {
-      const peers = this._rules
-        .map((r, i) => ({ r, i }))
-        .filter(({ r }) => r.mode === mode);
+      // Build mode tables containing multiple groups
+      const groupsHtml = this._groups.map((group, gIdx) => {
+        if (group.mode !== mode) return '';
+        
+        const hasGroupOv = (group.covers || []).some(c => overrides.has(c));
+        const rules = group.rules || [];
+        const rowspan = rules.length + 1; // +1 for the Add Action row
 
-      const rowsHtml = peers.map(({ r, i }, pos) => {
-        const hasOv = (r.covers || []).some(c => overrides.has(c));
-        const hasContent = (r.covers && r.covers.length > 0) ||
-          r.position != null || r.tilt != null ||
-          CONDITION_KEYS.some(k => r[k] != null);
-        const isInvalid = hasContent && r.position == null && r.tilt == null;
-        const rowClass = hasOv ? 'has-override' : isInvalid ? 'row-invalid' : '';
+        let rowsHtml = '';
+
+        for (let rIdx = 0; rIdx < rules.length; rIdx++) {
+          const r = rules[rIdx];
+          const hasContent = (r.conditions && r.conditions.length > 0) || r.action?.position != null || r.action?.tilt != null;
+          const isInvalid = hasContent && r.action?.position == null && r.action?.tilt == null;
+          const rowClass = isInvalid ? 'row-invalid' : '';
+          const condStr = formatCondition(r.conditions);
+
+          const isFirst = rIdx === 0;
+          const coversTd = isFirst ? `
+            <td rowspan="${rowspan}" class="covers-cell">
+              <div style="display:flex; flex-direction:column; height:100%; gap:8px">
+                <div>
+                  ${this._coverPickerHtml(group.covers)}
+                  ${hasGroupOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
+                </div>
+                <div style="flex:1"></div>
+                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete Group" style="align-self:flex-start">✕ Delete Covers</button>
+              </div>
+            </td>
+          ` : '';
+
+          rowsHtml += `
+            <tr class="rule-row ${rowClass}" data-gidx="${gIdx}" data-ridx="${rIdx}">
+              ${coversTd}
+              <td>
+                <div class="row-btns" style="flex-direction:column;gap:0">
+                  <button class="icon-btn up-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
+                    ${rIdx === 0 ? 'disabled' : ''} title="Move up">▲</button>
+                  <button class="icon-btn dn-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
+                    ${rIdx === rules.length - 1 ? 'disabled' : ''} title="Move down">▼</button>
+                </div>
+              </td>
+              <td>
+                <div class="cond-wrap">
+                  <input class="f-cond" value="${condStr}" placeholder="az>150 el<30" />
+                  <span class="cond-badge ${validateCondition(condStr).ok ? 'ok' : 'error'}">${condStr ? (validateCondition(condStr).ok ? '✓' : '✗') : ''}</span>
+                </div>
+              </td>
+              <td><input class="f-pos narrow" type="number" min="0" max="100"
+                value="${r.action?.position ?? ''}" placeholder="—" /></td>
+              <td><input class="f-tilt narrow" type="number" min="0" max="100"
+                value="${r.action?.tilt ?? ''}" placeholder="—" /></td>
+              <td>
+                <div class="row-btns" style="justify-content:flex-end">
+                  <button class="icon-btn del del-rule-btn" data-gidx="${gIdx}" data-ridx="${rIdx}" title="Delete">✕</button>
+                </div>
+              </td>
+            </tr>`;
+        }
+
+        const addRowCoversTd = rules.length === 0 ? `
+            <td rowspan="${rowspan}" class="covers-cell">
+              <div style="display:flex; flex-direction:column; height:100%; gap:8px">
+                <div>
+                  ${this._coverPickerHtml(group.covers)}
+                  ${hasGroupOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
+                </div>
+                <div style="flex:1"></div>
+                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete Group" style="align-self:flex-start">✕ Delete Covers</button>
+              </div>
+            </td>
+        ` : '';
+
         return `
-          <tr data-idx="${i}"${rowClass ? ` class="${rowClass}"` : ''}>
-            <td style="width:46px">
-              <div class="row-btns" style="flex-direction:column;gap:0">
-                <button class="icon-btn up-btn" data-idx="${i}"
-                  ${pos === 0 ? 'disabled' : ''} title="Move up">▲</button>
-                <button class="icon-btn dn-btn" data-idx="${i}"
-                  ${pos === peers.length - 1 ? 'disabled' : ''} title="Move down">▼</button>
-              </div>
-            </td>
-            <td>${this._coverPickerHtml(r.covers)}</td>
-            <td>
-              <div class="cond-wrap">
-                <input class="f-cond" value="${formatCondition(r)}" placeholder="az>150 el<30" />
-                <span class="cond-badge ${validateCondition(formatCondition(r)).ok ? 'ok' : 'error'}">${formatCondition(r) ? (validateCondition(formatCondition(r)).ok ? '✓' : '✗') : ''}</span>
-              </div>
-            </td>
-            <td><input class="f-pos narrow" type="number" min="0" max="100"
-              value="${r.position ?? ''}" placeholder="—" /></td>
-            <td><input class="f-tilt narrow" type="number" min="0" max="100"
-              value="${r.tilt ?? ''}" placeholder="—" /></td>
-            <td style="width:64px">
-              <div class="row-btns">
-                ${hasOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
-                <button class="icon-btn del del-btn" data-idx="${i}" title="Delete">✕</button>
-              </div>
-            </td>
-          </tr>`;
+          <tbody class="cover-group" data-mode="${mode}" data-gidx="${gIdx}">
+            ${rowsHtml}
+            <tr class="add-row">
+              ${addRowCoversTd}
+              <td colspan="5">
+                <button class="add-rule-btn" data-gidx="${gIdx}">＋ Add Action</button>
+              </td>
+            </tr>
+          </tbody>`;
       }).join('');
 
       return `
@@ -574,40 +668,37 @@ class SmartShadesPanel extends HTMLElement {
             ${MODE_LABELS[mode] || mode}
             ${this._orphaned.has(mode) ? ' <span class="orphan-warn">⚠ not in input_select</span>' : ''}
           </div>
-          <div class="card">
+          <div class="table-card">
             <table>
-              <thead><tr>
-                <th></th>
-                <th style="width:38%">Covers</th>
-                <th style="width:22%">Condition</th>
-                <th style="width:8%">Pos%</th>
-                <th style="width:8%">Tilt%</th>
-                <th></th>
-              </tr></thead>
-              <tbody id="tbody-${mode}">${rowsHtml}</tbody>
-              <tbody><tr class="add-row"><td colspan="6">
-                <button class="add-btn" data-mode="${mode}">＋  Add rule for ${mode}</button>
-              </td></tr></tbody>
+              <thead>
+                <tr>
+                  <th style="width: 30%">Covers</th>
+                  <th style="width: 46px"></th>
+                  <th style="width: 40%">Condition</th>
+                  <th style="width: 15%">Pos%</th>
+                  <th style="width: 15%">Tilt%</th>
+                  <th style="width: 64px"></th>
+                </tr>
+              </thead>
+              ${groupsHtml}
             </table>
           </div>
+          <button class="add-group-btn" data-mode="${mode}">＋ Add Covers</button>
         </div>`;
     }).join('');
 
-    // ── Cover datalist (autocomplete) ──────────────────────────────
     const coverOptions = Object.keys(this._hass.states)
       .filter(e => e.startsWith('cover.'))
       .sort()
       .map(e => `<option value="${e}">`)
       .join('');
 
-    // ── Helpers link ───────────────────────────────────────────────
     const modeEntity = this._cfg.mode_entity;
     const helpersLink = modeEntity
       ? `<a class="helpers-link" id="helpers-link" href="#"
            title="Manage ${modeEntity} options">⚙ Mode options</a>`
       : '';
 
-    // ── Full HTML ──────────────────────────────────────────────────
     root.innerHTML = `
       <style>${CSS}</style>
       <datalist id="covers-list">${coverOptions}</datalist>
@@ -637,19 +728,43 @@ class SmartShadesPanel extends HTMLElement {
           <strong>↑ Priority</strong> rules are evaluated before all mode rules and override everything. &nbsp;
           <strong>↓ Default</strong> rules are evaluated only when no rule in the current mode matched a cover.
         </span>
-        <button class="save-btn" id="save-btn" ${this._saving ? 'disabled' : ''}>
-          ${this._saving ? 'Saving…' : 'Save'}
-          ${this._dirty && !this._saving ? '<span class="unsaved-dot"></span>' : ''}
-        </button>
-      </div>`;
+        <div style="display:flex; flex-direction:column; gap:12px; align-items:flex-end;">
+          <div class="tools-bar">
+            <button class="secondary-btn" id="llm-btn">Generate LLM Prompt</button>
+            <button class="secondary-btn" id="export-btn">Export</button>
+            <button class="secondary-btn" id="import-btn">Import</button>
+          </div>
+          <button class="save-btn" id="save-btn" ${this._saving ? 'disabled' : ''}>
+            ${this._saving ? 'Saving…' : 'Save'}
+            ${this._dirty && !this._saving ? '<span class="unsaved-dot"></span>' : ''}
+          </button>
+        </div>
+      </div>
+
+      <dialog id="import-dialog">
+        <h3 class="dialog-title">Import Rules</h3>
+        <div style="margin-bottom:8px; font-size:13px; opacity:0.8;">Paste your JSON rules here. This will OVERWRITE all existing rules.</div>
+        <textarea id="import-textarea" class="dialog-textarea" placeholder="[ { mode: '...', covers: [...], rules: [...] } ]"></textarea>
+        <div class="dialog-actions">
+          <button class="secondary-btn" id="import-cancel">Cancel</button>
+          <button class="save-btn" id="import-confirm">Import & Replace</button>
+        </div>
+      </dialog>
+
+      <dialog id="fallback-dialog">
+        <h3 class="dialog-title" id="fallback-title">Copy to Clipboard</h3>
+        <div style="margin-bottom:8px; font-size:13px; opacity:0.8;">Your browser blocked automatic copying. Please copy the text below manually.</div>
+        <textarea id="fallback-textarea" class="dialog-textarea" readonly></textarea>
+        <div class="dialog-actions">
+          <button class="save-btn" id="fallback-close">Close</button>
+        </div>
+      </dialog>`;
 
     // ── Event wiring ───────────────────────────────────────────────
 
-    // Tab click → scroll to section
     root.querySelectorAll('.mode-tab[data-mode]').forEach(btn =>
       btn.addEventListener('click', () => {
         this._mode = btn.dataset.mode;
-        this._addingMode = false;
         root.querySelectorAll('.mode-tab').forEach(t =>
           t.classList.toggle('active', t.dataset.mode === this._mode)
         );
@@ -658,7 +773,6 @@ class SmartShadesPanel extends HTMLElement {
       })
     );
 
-    // IntersectionObserver keeps active tab in sync while scrolling
     const io = new IntersectionObserver(entries => {
       for (const e of entries) {
         if (e.isIntersecting) {
@@ -673,20 +787,26 @@ class SmartShadesPanel extends HTMLElement {
 
     root.querySelector('#save-btn').addEventListener('click', () => this._save());
 
-    root.querySelectorAll('.add-btn[data-mode]').forEach(btn =>
-      btn.addEventListener('click', () => this._addRule(btn.dataset.mode))
+    root.querySelectorAll('.add-group-btn').forEach(btn =>
+      btn.addEventListener('click', () => this._addGroup(btn.dataset.mode))
     );
-    root.querySelectorAll('.del-btn').forEach(btn =>
-      btn.addEventListener('click', () => this._deleteRule(+btn.dataset.idx))
+    root.querySelectorAll('.del-group-btn').forEach(btn =>
+      btn.addEventListener('click', () => this._deleteGroup(+btn.dataset.gidx))
+    );
+    
+    root.querySelectorAll('.add-rule-btn').forEach(btn =>
+      btn.addEventListener('click', () => this._addRule(+btn.dataset.gidx))
+    );
+    root.querySelectorAll('.del-rule-btn').forEach(btn =>
+      btn.addEventListener('click', () => this._deleteRule(+btn.dataset.gidx, +btn.dataset.ridx))
     );
     root.querySelectorAll('.up-btn').forEach(btn =>
-      btn.addEventListener('click', () => this._moveRule(+btn.dataset.idx, -1))
+      btn.addEventListener('click', () => this._moveRule(+btn.dataset.gidx, +btn.dataset.ridx, -1))
     );
     root.querySelectorAll('.dn-btn').forEach(btn =>
-      btn.addEventListener('click', () => this._moveRule(+btn.dataset.idx, +1))
+      btn.addEventListener('click', () => this._moveRule(+btn.dataset.gidx, +btn.dataset.ridx, +1))
     );
 
-    // ── Cover chip pickers ─────────────────────────────────────────
     const markDirty = () => {
       if (this._dirty) return;
       this._dirty = true;
@@ -736,7 +856,6 @@ class SmartShadesPanel extends HTMLElement {
       inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
     });
 
-    // Live condition validation
     root.querySelectorAll('.f-cond').forEach(inp => {
       const badge = inp.nextElementSibling;
       const update = () => {
@@ -754,12 +873,10 @@ class SmartShadesPanel extends HTMLElement {
       inp.addEventListener('input', update);
     });
 
-    // Mark dirty on pos/tilt edits
     root.querySelectorAll('.f-pos, .f-tilt').forEach(inp =>
       inp.addEventListener('input', markDirty)
     );
 
-    // ── Helpers link ───────────────────────────────────────────────
     root.querySelector('#helpers-link')?.addEventListener('click', e => {
       e.preventDefault();
       const entity = this._cfg?.mode_entity;
@@ -767,6 +884,148 @@ class SmartShadesPanel extends HTMLElement {
         history.pushState(null, '', `/?more-info-entity-id=${entity}`);
         window.dispatchEvent(new CustomEvent('location-changed'));
       }
+    });
+
+    // ── Tools ─────────────────────────────────────────────────────────
+
+    const copyToClipboard = async (text, title) => {
+      try {
+        if (!navigator.clipboard) throw new Error('No clipboard API');
+        await navigator.clipboard.writeText(text);
+        alert('Copied to clipboard!');
+      } catch (e) {
+        const d = root.querySelector('#fallback-dialog');
+        root.querySelector('#fallback-title').textContent = title;
+        root.querySelector('#fallback-textarea').value = text;
+        d.showModal();
+      }
+    };
+
+    root.querySelector('#export-btn')?.addEventListener('click', () => {
+      this._collect();
+      const json = JSON.stringify(this._groups, null, 2);
+      copyToClipboard(json, 'Export Rules');
+    });
+
+    root.querySelector('#import-btn')?.addEventListener('click', () => {
+      const d = root.querySelector('#import-dialog');
+      root.querySelector('#import-textarea').value = '';
+      d.showModal();
+    });
+
+    root.querySelector('#import-cancel')?.addEventListener('click', () => {
+      root.querySelector('#import-dialog').close();
+    });
+
+    root.querySelector('#fallback-close')?.addEventListener('click', () => {
+      root.querySelector('#fallback-dialog').close();
+    });
+
+    root.querySelector('#import-confirm')?.addEventListener('click', () => {
+      const val = root.querySelector('#import-textarea').value;
+      try {
+        const parsed = JSON.parse(val);
+        if (!Array.isArray(parsed)) throw new Error('Import must be an array of rule groups');
+        this._groups = parsed;
+        this._dirty = true;
+        root.querySelector('#import-dialog').close();
+        this._render();
+      } catch (e) {
+        alert('Invalid JSON: ' + e.message);
+      }
+    });
+
+    root.querySelector('#llm-btn')?.addEventListener('click', () => {
+      this._collect();
+
+      // Group covers by device
+      const entities = this._hass.entities || {};
+      const devices = this._hass.devices || {};
+      const states = this._hass.states || {};
+      const covers = Object.keys(states).filter(e => e.startsWith('cover.'));
+      
+      const devicesMap = new Map();
+      const noDeviceCovers = [];
+
+      for (const e of covers) {
+        const s = states[e];
+        const friendly = s.attributes.friendly_name || e;
+        const reg = entities[e];
+        if (reg && reg.device_id) {
+          if (!devicesMap.has(reg.device_id)) {
+            const dev = devices[reg.device_id];
+            const devName = dev ? (dev.name_by_user || dev.name || 'Unknown Device') : 'Unknown Device';
+            devicesMap.set(reg.device_id, { name: devName, entities: [] });
+          }
+          devicesMap.get(reg.device_id).entities.push({ id: e, name: friendly });
+        } else {
+          noDeviceCovers.push({ id: e, name: friendly });
+        }
+      }
+
+      let coversPrompt = '';
+      for (const [id, dev] of devicesMap.entries()) {
+        coversPrompt += `- Device: ${dev.name}\n`;
+        for (const ent of dev.entities) {
+          coversPrompt += `  - ${ent.id} (${ent.name})\n`;
+        }
+      }
+      if (noDeviceCovers.length > 0) {
+        coversPrompt += `- Other covers:\n`;
+        for (const ent of noDeviceCovers) {
+          coversPrompt += `  - ${ent.id} (${ent.name})\n`;
+        }
+      }
+
+      const prompt = `I am building a system to automate my shades in Home Assistant. 
+Unlike standard Home Assistant automations which are event-driven and based on momentary triggers, this system operates as a continuous state engine. We define declarative rules that dictate the absolute position and tilt the shades should have based on current environmental inputs (time, sun azimuth/elevation, month, presence). The system continuously evaluates these rules to ensure the physical shades always match the desired state.
+The active set of rules at any given time is chosen based on a specific input enum (the "Mode").
+
+### System State
+Available Modes (Input Enum): ${this._modes.join(', ')}
+
+Available Covers:
+${coversPrompt}
+
+### Rule Format
+The rules are an array of JSON objects. Each object is a "Group" and targets one mode.
+Format:
+\`\`\`json
+[
+  {
+    "mode": "KUEHLEN",
+    "covers": ["cover.storen_buero", "cover.storen_buero_2"],
+    "rules": [
+      {
+        "conditions": [
+          {"var": "azimuth", "op": ">", "val": 150},
+          {"var": "elevation", "op": ">=", "val": 5},
+          {"var": "time", "op": ">", "val": 830},
+          {"var": "month", "op": ">=", "val": 6},
+          {"var": "presence", "op": "==", "val": "home"}
+        ],
+        "action": {"position": 0, "tilt": null}
+      }
+    ]
+  }
+]
+\`\`\`
+
+### Rule Engine Process
+- A group defines rules for a specific mode and a specific set of covers.
+- Time is specified as HHMM (integer). e.g., 08:30 is 830. 19:00 is 1900.
+- For each cover in a mode, the first rule that matches its conditions will be executed. Subsequent rules in the same group are ignored for that cover.
+- Special Mode "_priority": Evaluated before all other modes. Overrides everything.
+- Special Mode "_fallback": Evaluated only if no rule matched the cover in the current mode or priority mode.
+
+### Current Rules
+\`\`\`json
+${JSON.stringify(this._groups, null, 2)}
+\`\`\`
+
+Please help me write/modify the rules based on my requirements.`;
+
+      copyToClipboard(prompt, 'LLM Prompt');
     });
   }
 }

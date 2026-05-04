@@ -327,13 +327,13 @@ class ShadeManager:
         tolerance = self._tolerance()
         now = datetime.now()
 
-        rules = self.entry.options.get(CONF_RULES, [])
+        groups = self.entry.options.get(CONF_RULES, [])
         hour, minute, month = now.hour, now.minute, now.month
         time_hhmm = hour * 100 + minute
         presence = self._presence()
         ctx = (azimuth, elevation, time_hhmm, month)
 
-        shade_targets = evaluate_rules(rules, current_mode, *ctx, presence)
+        shade_targets = evaluate_rules(groups, current_mode, *ctx, presence)
 
         for entity_id, target in shade_targets.items():
             state = self.hass.states.get(entity_id)

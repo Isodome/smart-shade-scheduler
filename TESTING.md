@@ -1,5 +1,19 @@
 # Testing Strategy
 
+## Initial Setup (For New Clones)
+If you have just cloned this repository, you should set up a Python virtual environment before installing dependencies or running any tests. This ensures the required packages don't conflict with your system.
+
+```bash
+# 1. Create a virtual environment in the project directory
+python3 -m venv .venv
+
+# 2. Activate the virtual environment
+source .venv/bin/activate
+```
+*(You will need to run the `source` command every time you open a new terminal to work on the project).*
+
+---
+
 The integration has three distinct layers, each requiring a different testing approach.
 
 ---
@@ -94,23 +108,29 @@ async def test_ws_get_config(hass, hass_ws_client):
 
 ### Setup
 ```bash
-npm init -y
-npm install --save-dev jest
-# Extract the three functions into src/conditions.js, then:
-npx jest
+cd custom_components/smart_shades/www
+npm install
 ```
 
-### Example tests
+### Running the tests
+```bash
+npx --node-options=--experimental-vm-modules jest
+```
+
+### Example tests (in `conditions.test.js`)
 ```js
+import { parseCondition, validateCondition, formatCondition } from './conditions.js';
+
 test('parses all operators', () => {
-  expect(parseCondition('az>150')).toEqual({ azimuth_above: 150 });
-  expect(parseCondition('el>=5')).toEqual({ elevation_min: 5 });
-  expect(parseCondition('h==8')).toEqual({ hour_eq: 8 });
-  expect(parseCondition('m<=30')).toEqual({ minute_max: 30 });
+  expect(parseCondition('az>150')).toEqual([{ var: 'azimuth', op: '>', val: 150 }]);
+  expect(parseCondition('el>=5')).toEqual([{ var: 'elevation', op: '>=', val: 5 }]);
+  expect(parseCondition('t==8:00')).toEqual([{ var: 'time', op: '==', val: 800 }]);
+  expect(parseCondition('mo<=8')).toEqual([{ var: 'month', op: '<=', val: 8 }]);
+  expect(parseCondition('home')).toEqual([{ var: 'presence', op: '==', val: 'home' }]);
 });
 
 test('round-trips cleanly', () => {
-  const str = 'az>185 el>=5 h>6 h<10';
+  const str = 'az>185 el>=5 t>6:00 t<10:00';
   expect(formatCondition(parseCondition(str))).toBe(str);
 });
 
@@ -206,8 +226,24 @@ curl -X POST http://homeassistant.local:8123/api/config/config_entries/entry/ENT
 ## Recommended next steps
 
 1. **Immediately**: write Layer 1 unit tests — zero setup cost, covers the most critical logic
-2. **Short term**: extract `parseCondition`/`validateCondition`/`formatCondition` into a separate `src/conditions.js` and add Jest tests
-3. **Short term**: add `ws_test.py` script to the repo so the current breakage can be diagnosed in one command
-4. **Medium term**: add `pytest-homeassistant-custom-component` for Layer 2
+2. **Short term**: add `ws_test.py` script to the repo so the current breakage can be diagnosed in one command
+3. **Medium term**: add `pytest-homeassistant-custom-component` for Layer 2
 
 The Layer 1 + Layer 3 tests can run in CI (GitHub Actions) with no HA instance required.
+
+---
+
+## Deploying to Local Instance
+
+When you make local changes to the python backend or the javascript frontend, you can deploy them directly to your Home Assistant instance using SSH:
+
+1. **Sync the codebase:**
+   Use the provided deployment script. This safely bundles the component and copies it over SSH while explicitly ignoring large folders like `node_modules` and caches.
+   ```bash
+   ./scripts/deploy.sh
+   ```
+
+2. **Restart Home Assistant:**
+   ```bash
+   ssh root@homeassistant.local "ha core restart"
+   ```

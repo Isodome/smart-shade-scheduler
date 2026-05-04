@@ -7,7 +7,7 @@ A Home Assistant custom integration for rule-based, sun- and time-aware automati
 ## Features
 
 ### Sidebar panel UI
-A dedicated **Shades** entry appears in the HA sidebar. All rules for all modes are visible in a single scrollable view. A sticky tab bar at the top lets you jump directly to any mode section. No YAML, no config flows for day-to-day rule management.
+A dedicated **Shades** entry appears in the HA sidebar. All rules for all modes are organized into **Cover Group Cards**. A sticky tab bar at the top lets you jump directly to any mode section. Each card defines a group of covers, and inside the card, you define an ordered list of conditions and actions that apply to those covers. No YAML, no config flows for day-to-day rule management.
 
 ### Mode-aware rules
 Tie every rule to a **mode** — the state of an `input_select` entity. Whenever the mode changes, all covers instantly re-evaluate. The mode tab bar mirrors the input_select options exactly and updates automatically.
@@ -19,7 +19,7 @@ Rules are evaluated in strict priority order for each cover:
 2. **Current mode** — the active input_select state (e.g. `KUEHLEN`, `BLENDSCHUTZ`).
 3. **↓ Default** — rules in this special mode run only for covers that were not matched by any priority or current-mode rule. Use for sensible defaults.
 
-Within each pass, rules are evaluated **top-to-bottom** and the **first match wins** per cover. Place specific (conditional) rules above catch-all rules.
+Within each pass, Cover Groups are evaluated. Inside a group, rules are evaluated **top-to-bottom** and the **first match wins** for the covers in that group. Place specific (conditional) rules at the top of the card, and catch-all rules at the bottom.
 
 ### Rich condition syntax
 Each rule optionally specifies conditions (space-separated tokens). All six comparison operators are supported:
@@ -102,16 +102,20 @@ Rules are stored in Home Assistant's config entry options (`.storage/core.config
 
 ---
 
-## Rule fields
+## Rule structure
+
+Rules are grouped into **Cards** in the UI. Each card represents a logical grouping of covers for a specific mode.
 
 | Field | Description |
 |---|---|
-| **Covers** | One or more `cover.*` entities |
-| **Condition** | Space-separated condition tokens (see syntax above). Empty = catch-all. |
-| **Position** | Target position: 0 = fully closed, 100 = fully open |
-| **Tilt** | Target tilt: 0 = fully closed, 100 = fully open |
+| **Covers (Header)** | One or more `cover.*` entities that the card applies to. |
+| **Condition** | Space-separated condition tokens (see syntax above). Empty = catch-all. Evaluated top-to-bottom. |
+| **Position** | Target position: 0 = fully closed, 100 = fully open. |
+| **Tilt** | Target tilt: 0 = fully closed, 100 = fully open. |
 
-Either position or tilt (or both) must be set for a rule to be active. Rules missing both are kept in storage but ignored by the engine.
+Either position or tilt (or both) must be set for a rule row to be active. Rows missing both are kept in storage but ignored by the engine.
+
+The underlying JSON storage uses a highly extensible Abstract Syntax Tree (AST) format, cleanly separating `conditions` and `action` payloads.
 
 ---
 
@@ -136,6 +140,7 @@ Either position or tilt (or both) must be set for a rule to be active. Rules mis
 - ~~**Presence condition**~~ — done. `home`/`away` bare tokens; configure a presence entity (zone, binary_sensor, person, or device_tracker) at setup.
 
 ### Backlog
+- **Generic Entity / Lights Support** — Leverage the new AST rule engine to support `light.*` or other domains, allowing conditions like motion detection and actions like setting brightness or color.
 - ~~**Lenient condition parsing**~~ — done. All spaces are stripped before tokenising; `az > 150`, `az>= 150`, and `az>=150` are identical.
 - **Cover groups** — allow a group entity (or a named list) to be used as a single cover target in a rule, so one rule can manage many covers without listing each one.
 - **Jinja2 templates for position/tilt** — allow the position and tilt fields to accept a template string (e.g. `{{ 50 if az > 200 else 100 }}`), enabling smooth continuous adjustment instead of discrete breakpoints.

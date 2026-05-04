@@ -7,7 +7,8 @@
       "Bash(ssh root@192.168.88.253 \"cat *\")",
       "Bash(ssh root@192.168.88.253 \"ls *\")",
       "Bash(ssh root@192.168.88.253 \"journalctl *\")",
-      "Bash(.venv/bin/pytest tests/ -v)"
+      "Bash(.venv/bin/pytest tests/ -v)",
+      "Bash(python -m pytest tests/test_rule_matches.py tests/test_evaluate_rules.py -v)"
     ]
   }
 }
