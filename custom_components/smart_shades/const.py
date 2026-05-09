@@ -21,6 +21,7 @@ RULE_TILT = "tilt"
 CONF_DND_ENTITY = "dnd_entity"           # binary_sensor: on = DND active
 CONF_OVERRIDE_DURATION_ENTITY = "override_duration_entity"
 CONF_PRESENCE_ENTITY = "presence_entity" # zone/binary_sensor/person/device_tracker
+CONF_MODE_CONFIG     = "mode_config"     # dict: mode → {block_fallback, force}
 
 # Reserved mode keys — always present, never orphaned
 PRIORITY_MODE = "_priority"
@@ -34,5 +35,6 @@ DEFAULT_DND_START = "22:00:00"
 DEFAULT_DND_END = "07:00:00"
 
 # Behaviour
-OVERRIDE_DURATION_HOURS = 4
+CONF_OVERRIDE_DURATION = "override_duration"   # seconds, stored in options
+DEFAULT_OVERRIDE_DURATION = 2                  # seconds
 SCAN_INTERVAL_MINUTES = 15

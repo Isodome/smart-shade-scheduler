@@ -7,12 +7,14 @@
         "data": {
           "mode_entity": "Mode entity (input_select)",
           "dnd_entity": "Do-not-disturb sensor (optional)",
-          "override_duration_entity": "Override duration entity (optional)"
+          "override_duration_entity": "Override duration entity (optional)",
+          "presence_entity": "Presence entity (optional)"
         },
         "data_description": {
           "mode_entity": "The input_select whose options define your automation modes.",
           "dnd_entity": "A binary_sensor that is `on` when automation should pause. Overrides the time-based DND window.",
-          "override_duration_entity": "An input_number (in hours) controlling how long manual overrides last. Overrides the built-in 4-hour default."
+          "override_duration_entity": "An input_number (in hours) controlling how long manual overrides last. Overrides the built-in 4-hour default.",
+          "presence_entity": "A zone, binary_sensor, person, or device_tracker entity used to evaluate `home`/`away` conditions in rules."
         }
       }
     },
@@ -33,13 +35,15 @@
           "tolerance": "Position tolerance (%)",
           "dnd_start": "Do-not-disturb start",
           "dnd_end": "Do-not-disturb end",
-          "wipe_time": "Daily override reset time"
+          "wipe_time": "Daily override reset time",
+          "override_duration": "Manual override duration (seconds)"
         },
         "data_description": {
           "tolerance": "A cover is only moved if it deviates more than this many percent from the target.",
           "dnd_start": "No automated movements after this time.",
           "dnd_end": "Automated movements resume at this time.",
-          "wipe_time": "All manual overrides are cleared at this time each day."
+          "wipe_time": "All manual overrides are cleared at this time each day.",
+          "override_duration": "How long a manual move suppresses automation. Default 2 s (testing). Set to 14400 for 4 hours."
         }
       }
     }

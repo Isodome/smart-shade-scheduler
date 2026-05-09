@@ -12,6 +12,7 @@ from homeassistant.components.frontend import (
 from homeassistant.core import HomeAssistant, callback
 
 from .const import (
+    CONF_MODE_CONFIG,
     CONF_MODE_ENTITY,
     CONF_RULES,
     DOMAIN,
@@ -24,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 _PANEL_URL = "smart-shades"
 _STATIC_URL = "/smart_shades_static"
 _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
-_JS_VERSION = "26"  # bump to bust the browser cache
+_JS_VERSION = "34"  # bump to bust the browser cache
 
 
 async def async_setup(hass: HomeAssistant) -> None:
@@ -117,6 +118,7 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
     connection.send_result(msg["id"], {
         "entry_id": entry.entry_id,
         "rules": rules,
+        "mode_config": entry.options.get(CONF_MODE_CONFIG, {}),
         "mode_entity": mode_entity,
         "current_mode": mode_state.state if mode_state else None,
         "mode_options": combined,
@@ -134,6 +136,7 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
     vol.Required("type"): "smart_shades/save_rules",
     vol.Required("entry_id"): str,
     vol.Required("rules"): list,
+    vol.Optional("mode_config"): dict,
 })
 @callback
 def ws_save_rules(hass: HomeAssistant, connection, msg) -> None:
@@ -144,8 +147,8 @@ def ws_save_rules(hass: HomeAssistant, connection, msg) -> None:
         )
         return
 
-    hass.config_entries.async_update_entry(
-        entry,
-        options={**entry.options, CONF_RULES: msg["rules"]},
-    )
+    new_options = {**entry.options, CONF_RULES: msg["rules"]}
+    if "mode_config" in msg:
+        new_options[CONF_MODE_CONFIG] = msg["mode_config"]
+    hass.config_entries.async_update_entry(entry, options=new_options)
     connection.send_result(msg["id"], {"success": True})

@@ -90,16 +90,19 @@ def evaluate_rules(
     time_hhmm: int,
     month: int = 1,
     presence: bool | None = None,
+    block_fallback: bool = False,
 ) -> dict:
     """Run the full 3-pass evaluation and return the shade targets dict.
 
     Returns: { entity_id: {"p": position_or_None, "t": tilt_or_None} }
+    block_fallback: when True, the fallback pass is skipped entirely.
     """
     targets: dict = {}
     fill_targets("_priority",  groups, targets, azimuth, elevation, time_hhmm, month, presence)
     if current_mode:
         fill_targets(current_mode, groups, targets, azimuth, elevation, time_hhmm, month, presence)
-    fill_targets("_fallback",  groups, targets, azimuth, elevation, time_hhmm, month, presence)
+    if not block_fallback:
+        fill_targets("_fallback",  groups, targets, azimuth, elevation, time_hhmm, month, presence)
     return targets
 
 

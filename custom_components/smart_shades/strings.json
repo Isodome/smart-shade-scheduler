@@ -35,13 +35,15 @@
           "tolerance": "Position tolerance (%)",
           "dnd_start": "Do-not-disturb start",
           "dnd_end": "Do-not-disturb end",
-          "wipe_time": "Daily override reset time"
+          "wipe_time": "Daily override reset time",
+          "override_duration": "Manual override duration (seconds)"
         },
         "data_description": {
           "tolerance": "A cover is only moved if it deviates more than this many percent from the target.",
           "dnd_start": "No automated movements after this time.",
           "dnd_end": "Automated movements resume at this time.",
-          "wipe_time": "All manual overrides are cleared at this time each day."
+          "wipe_time": "All manual overrides are cleared at this time each day.",
+          "override_duration": "How long a manual move suppresses automation. Default 2 s (testing). Set to 14400 for 4 hours."
         }
       }
     }

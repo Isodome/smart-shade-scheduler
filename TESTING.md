@@ -235,15 +235,8 @@ The Layer 1 + Layer 3 tests can run in CI (GitHub Actions) with no HA instance r
 
 ## Deploying to Local Instance
 
-When you make local changes to the python backend or the javascript frontend, you can deploy them directly to your Home Assistant instance using SSH:
+Use the provided deployment script. It bundles the component with tar (excluding `node_modules`, `__pycache__`, etc.), copies it over SSH, extracts it on HA, and restarts the core — all in one step.
 
-1. **Sync the codebase:**
-   Use the provided deployment script. This safely bundles the component and copies it over SSH while explicitly ignoring large folders like `node_modules` and caches.
-   ```bash
-   ./scripts/deploy.sh
-   ```
-
-2. **Restart Home Assistant:**
-   ```bash
-   ssh root@homeassistant.local "ha core restart"
-   ```
+```bash
+bash scripts/deploy.sh
+```

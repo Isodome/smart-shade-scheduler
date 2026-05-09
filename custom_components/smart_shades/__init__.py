@@ -17,7 +17,9 @@ from .const import (
     CONF_DND_END,
     CONF_DND_ENTITY,
     CONF_DND_START,
+    CONF_MODE_CONFIG,
     CONF_MODE_ENTITY,
+    CONF_OVERRIDE_DURATION,
     CONF_OVERRIDE_DURATION_ENTITY,
     CONF_PRESENCE_ENTITY,
     CONF_RULES,
@@ -25,11 +27,11 @@ from .const import (
     CONF_WIPE_TIME,
     DEFAULT_DND_END,
     DEFAULT_DND_START,
+    DEFAULT_OVERRIDE_DURATION,
     DEFAULT_TOLERANCE,
     DEFAULT_WIPE_TIME,
     DOMAIN,
     FALLBACK_MODE,
-    OVERRIDE_DURATION_HOURS,
     PRIORITY_MODE,
     SCAN_INTERVAL_MINUTES,
 )
@@ -116,8 +118,12 @@ class ShadeManager:
 
         # entity_id → datetime when override started
         self._overrides: dict[str, datetime] = {}
-        # entity_id → {"p": position, "t": tilt} of our last command
+        # entity_id → {"p": position, "t": tilt, "ts": datetime} of our last command
         self._last_commanded: dict[str, dict] = {}
+
+        # Seconds after a command during which divergence checks are suppressed
+        # (cover may still be travelling to its commanded position)
+        self._TRANSIT_GRACE = 90
 
         self._unsub: list = []
         self._wipe_unsub = None
@@ -228,9 +234,36 @@ class ShadeManager:
     async def _on_ha_started(self, _event) -> None:
         await self.async_evaluate_rules()
 
+    def _managed_covers_for_mode(self, mode: str) -> set[str]:
+        """Return covers that will be evaluated (and potentially moved) in this mode."""
+        groups = self.entry.options.get(CONF_RULES, [])
+        mode_cfg = self.entry.options.get(CONF_MODE_CONFIG, {})
+        block_fallback = mode_cfg.get(mode, {}).get("block_fallback", False)
+        covers: set[str] = set()
+        for group in groups:
+            gmode = group.get("mode")
+            if gmode == "_priority" or gmode == mode:
+                covers.update(group.get("covers", []))
+            elif gmode == "_fallback" and not block_fallback:
+                covers.update(group.get("covers", []))
+        return covers
+
     @callback
-    def _on_mode_change(self, _event) -> None:
-        _LOGGER.debug("Mode changed, scheduling rule evaluation")
+    def _on_mode_change(self, event) -> None:
+        new_state = event.data.get("new_state")
+        new_mode = new_state.state if new_state else None
+        if new_mode:
+            mode_cfg = self.entry.options.get(CONF_MODE_CONFIG, {})
+            if mode_cfg.get(new_mode, {}).get("force"):
+                covers = self._managed_covers_for_mode(new_mode)
+                cleared = [e for e in list(self._overrides) if e in covers]
+                for entity_id in cleared:
+                    self._overrides.pop(entity_id)
+                    self._last_commanded.pop(entity_id, None)
+                _LOGGER.info(
+                    "Force mode '%s': cleared overrides for %s", new_mode, cleared
+                )
+                self._notify()
         self.hass.async_create_task(self.async_evaluate_rules())
 
     @callback
@@ -271,6 +304,7 @@ class ShadeManager:
         return is_dnd_active(start_str, end_str, datetime.now().time())
 
     def _override_duration(self) -> timedelta:
+        # Entity-based override takes priority (backwards compat)
         entity = self.entry.data.get(CONF_OVERRIDE_DURATION_ENTITY)
         if entity:
             state = self.hass.states.get(entity)
@@ -279,7 +313,8 @@ class ShadeManager:
                     return timedelta(hours=float(state.state))
                 except ValueError:
                     pass
-        return timedelta(hours=OVERRIDE_DURATION_HOURS)
+        seconds = int(self._opt(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION))
+        return timedelta(seconds=seconds)
 
     def _tolerance(self) -> int:
         return int(self._opt(CONF_TOLERANCE, DEFAULT_TOLERANCE))
@@ -331,9 +366,11 @@ class ShadeManager:
         hour, minute, month = now.hour, now.minute, now.month
         time_hhmm = hour * 100 + minute
         presence = self._presence()
+        mode_cfg = self.entry.options.get(CONF_MODE_CONFIG, {})
+        block_fallback = mode_cfg.get(current_mode, {}).get("block_fallback", False)
         ctx = (azimuth, elevation, time_hhmm, month)
 
-        shade_targets = evaluate_rules(groups, current_mode, *ctx, presence)
+        shade_targets = evaluate_rules(groups, current_mode, *ctx, presence, block_fallback)
 
         for entity_id, target in shade_targets.items():
             state = self.hass.states.get(entity_id)
@@ -374,6 +411,15 @@ class ShadeManager:
             # ── Divergence check: cover moved since our last command? ──────
             last = self._last_commanded.get(entity_id)
             if last is not None:
+                # Skip divergence check while the cover may still be in transit
+                cmd_age = (now - last["ts"]).total_seconds()
+                if cmd_age < self._TRANSIT_GRACE:
+                    await self._control_shade(
+                        entity_id, target_pos, target_tilt,
+                        tolerance, cur_pos, cur_tilt,
+                    )
+                    continue
+
                 last_pos = last.get("p")
                 last_tilt = last.get("t")
                 pos_moved = (
@@ -424,7 +470,7 @@ class ShadeManager:
         # Always record the scheduled target so the divergence check can detect
         # manual moves even when the cover was already at the right position
         # and no service call was needed.
-        self._last_commanded[entity_id] = {"p": final_pos, "t": tilt}
+        self._last_commanded[entity_id] = {"p": final_pos, "t": tilt, "ts": datetime.now()}
 
         if not needs_move:
             return

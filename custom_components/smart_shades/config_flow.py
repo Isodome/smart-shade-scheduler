@@ -10,12 +10,14 @@ from .const import (
     CONF_DND_ENTITY,
     CONF_DND_START,
     CONF_MODE_ENTITY,
+    CONF_OVERRIDE_DURATION,
     CONF_OVERRIDE_DURATION_ENTITY,
     CONF_PRESENCE_ENTITY,
     CONF_TOLERANCE,
     CONF_WIPE_TIME,
     DEFAULT_DND_END,
     DEFAULT_DND_START,
+    DEFAULT_OVERRIDE_DURATION,
     DEFAULT_TOLERANCE,
     DEFAULT_WIPE_TIME,
     DOMAIN,
@@ -45,6 +47,15 @@ def _settings_schema(opts: dict) -> vol.Schema:
                 CONF_WIPE_TIME,
                 default=opts.get(CONF_WIPE_TIME, DEFAULT_WIPE_TIME),
             ): selector.TimeSelector(),
+            vol.Optional(
+                CONF_OVERRIDE_DURATION,
+                default=opts.get(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1, max=86400, step=1, mode="box",
+                    unit_of_measurement="s",
+                )
+            ),
         }
     )
 
@@ -143,6 +154,7 @@ class SmartShadesOptionsFlow(config_entries.OptionsFlow):
                     CONF_DND_START: user_input[CONF_DND_START],
                     CONF_DND_END: user_input[CONF_DND_END],
                     CONF_WIPE_TIME: user_input[CONF_WIPE_TIME],
+                    CONF_OVERRIDE_DURATION: int(user_input[CONF_OVERRIDE_DURATION]),
                 },
             )
         return self.async_show_form(

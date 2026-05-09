@@ -192,8 +192,8 @@ const CSS = `
   .override-icon { color: #ff9800; cursor: default; font-size: 14px; margin-left: 4px; }
 
   /* ── Cover chip picker ─────────────────────────────── */
-  .cover-picker { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-  .chips { display: contents; }
+  .cover-picker { display: flex; flex-direction: column; gap: 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; min-height: 4px; }
   .chip {
     display: inline-flex; align-items: center; gap: 3px;
     background: var(--primary-color); color: var(--text-primary-color, #fff);
@@ -230,6 +230,40 @@ const CSS = `
   }
   .helpers-link:hover { opacity: 1; text-decoration: underline; }
 
+  /* ── Mode options (toggle switches) ───────────────── */
+  .mode-opts {
+    display: flex; gap: 20px; padding: 6px 12px 10px;
+    font-size: 12px; color: var(--secondary-text-color);
+  }
+  .mode-opts label {
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    user-select: none;
+  }
+  .mode-opts input[type=checkbox] { display: none; }
+  .toggle-track {
+    position: relative;
+    width: 36px; height: 20px; flex-shrink: 0;
+    background: var(--divider-color);
+    border-radius: 10px;
+    transition: background .2s;
+  }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    transition: transform .2s;
+  }
+  input[type=checkbox]:checked + .toggle-track {
+    background: var(--primary-color);
+  }
+  input[type=checkbox]:checked + .toggle-track::after {
+    transform: translateX(16px);
+  }
+
   /* ── Add buttons ───────────────────────────────────── */
   .add-row td { padding: 0; }
   .add-rule-btn {
@@ -247,7 +281,8 @@ const CSS = `
   .add-rule-btn:hover { background: var(--secondary-background-color); }
   
   .add-group-btn {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     padding: 6px 14px;
     background: transparent;
     border: 1px solid var(--primary-color);
@@ -258,6 +293,7 @@ const CSS = `
     cursor: pointer;
     margin-bottom: 24px;
     transition: background .15s, color .15s;
+    line-height: 1;
   }
   .add-group-btn:hover {
     background: var(--primary-color);
@@ -266,34 +302,50 @@ const CSS = `
 
   /* ── Footer ────────────────────────────────────────── */
   .footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     margin-top: 14px;
-    flex-wrap: wrap;
-    gap: 8px;
   }
-  .secondary-btn {
-    padding: 8px 14px;
-    background: transparent;
-    color: var(--primary-color);
-    border: 1px solid var(--primary-color);
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background .15s, color .15s;
-  }
-  .secondary-btn:hover {
-    background: var(--primary-color);
-    color: var(--text-primary-color, #fff);
-  }
-  .tools-bar {
+
+  /* ── Header actions (save + hamburger) ─────────────── */
+  .tab-bar-wrap {
     display: flex;
-    gap: 8px;
     align-items: center;
-    flex-wrap: wrap;
+    gap: 8px;
   }
+  .mode-tabs { flex: 1; }
+  .header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .hamburger-wrap { position: relative; }
+  .hamburger-btn {
+    background: var(--card-background-color);
+    border: 1px solid var(--divider-color);
+    border-radius: 8px;
+    padding: 7px 11px;
+    font-size: 16px;
+    cursor: pointer;
+    color: var(--primary-text-color);
+    line-height: 1;
+    transition: background .12s;
+  }
+  .hamburger-btn:hover { background: var(--secondary-background-color); }
+  .hamburger-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    background: var(--card-background-color);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.2);
+    min-width: 190px;
+    z-index: 100;
+    overflow: hidden;
+  }
+  .hamburger-menu.open { display: block; }
+  .hamburger-menu button {
+    display: block; width: 100%; padding: 11px 16px;
+    text-align: left; background: none; border: none; border-bottom: 1px solid var(--divider-color);
+    color: var(--primary-text-color); cursor: pointer; font-size: 13px;
+  }
+  .hamburger-menu button:last-child { border-bottom: none; }
+  .hamburger-menu button:hover { background: var(--secondary-background-color); }
   dialog {
     border: none;
     border-radius: 12px;
@@ -361,6 +413,31 @@ const CSS = `
     margin-left: 7px;
     vertical-align: middle;
   }
+
+  /* ── Undo toast ────────────────────────────────────── */
+  .undo-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #323232;
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.35);
+    z-index: 200;
+    white-space: nowrap;
+  }
+  .undo-toast-btn {
+    background: none; border: none;
+    color: #90caf9; font-weight: 600;
+    font-size: 14px; cursor: pointer; padding: 0;
+  }
+  .undo-toast-btn:hover { text-decoration: underline; }
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,9 +453,11 @@ class SmartShadesPanel extends HTMLElement {
     this._mode        = null;   // selected tab
     this._orphaned    = new Set();
     this._special     = new Set();
-    this._dirty       = false;
-    this._saving      = false;
-    this._error       = null;
+    this._dirty         = false;
+    this._saving        = false;
+    this._error         = null;
+    this._pendingDelete = null; // { group, gIdx, timer }
+    this._modeConfig    = {};   // mode → { block_fallback, force }
   }
 
   set hass(hass) {
@@ -389,9 +468,10 @@ class SmartShadesPanel extends HTMLElement {
   async _load() {
     try {
       const cfg = await this._ws('smart_shades/get_config');
-      this._cfg      = cfg;
-      this._groups   = JSON.parse(JSON.stringify(cfg.rules || []));
-      this._modes    = cfg.mode_options || [];
+      this._cfg        = cfg;
+      this._groups     = JSON.parse(JSON.stringify(cfg.rules || []));
+      this._modeConfig = JSON.parse(JSON.stringify(cfg.mode_config || {}));
+      this._modes      = cfg.mode_options || [];
       this._orphaned = new Set(cfg.orphaned_modes || []);
       this._special  = new Set(cfg.special_modes  || []);
       this._mode     = this._modes.includes(cfg.current_mode)
@@ -471,9 +551,27 @@ class SmartShadesPanel extends HTMLElement {
 
   _deleteGroup(gIdx) {
     this._collect();
+    // Clear any previous pending delete
+    if (this._pendingDelete) clearTimeout(this._pendingDelete.timer);
+    const group = JSON.parse(JSON.stringify(this._groups[gIdx]));
     this._groups.splice(gIdx, 1);
     this._dirty = true;
+    const timer = setTimeout(() => { this._pendingDelete = null; this._removeToast(); }, 5000);
+    this._pendingDelete = { group, gIdx, timer };
     this._render();
+  }
+
+  _undoDelete() {
+    if (!this._pendingDelete) return;
+    clearTimeout(this._pendingDelete.timer);
+    const { group, gIdx } = this._pendingDelete;
+    this._pendingDelete = null;
+    this._groups.splice(gIdx, 0, group);
+    this._render();
+  }
+
+  _removeToast() {
+    this.shadowRoot.querySelector('.undo-toast')?.remove();
   }
 
   _addRule(gIdx) {
@@ -521,6 +619,7 @@ class SmartShadesPanel extends HTMLElement {
       await this._ws('smart_shades/save_rules', {
         entry_id: this._cfg.entry_id,
         rules: outGroups,
+        mode_config: this._modeConfig,
       });
       this._dirty  = false;
       this._error  = null;
@@ -603,7 +702,7 @@ class SmartShadesPanel extends HTMLElement {
                   ${hasGroupOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
                 </div>
                 <div style="flex:1"></div>
-                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete Group" style="align-self:flex-start">✕ Delete Covers</button>
+                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete Group" style="align-self:flex-start">✕ Delete Group</button>
               </div>
             </td>
           ` : '';
@@ -645,7 +744,7 @@ class SmartShadesPanel extends HTMLElement {
                   ${hasGroupOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
                 </div>
                 <div style="flex:1"></div>
-                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete Group" style="align-self:flex-start">✕ Delete Covers</button>
+                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete Group" style="align-self:flex-start">✕ Delete Group</button>
               </div>
             </td>
         ` : '';
@@ -662,12 +761,27 @@ class SmartShadesPanel extends HTMLElement {
           </tbody>`;
       }).join('');
 
+      const isSpecial = this._special.has(mode);
+      const mc = this._modeConfig[mode] || {};
+      const modeOptsHtml = isSpecial ? '' : `
+        <div class="mode-opts">
+          <label title="When this mode is active, covers not targeted by any rule in this mode are left completely untouched — the ↓ Default rules do not run. Use this for modes where you only want to control specific covers and leave everything else as-is.">
+            <input type="checkbox" class="mc-block-fallback" data-mode="${mode}" ${mc.block_fallback ? 'checked' : ''}>
+            <span class="toggle-track"></span>
+            Block fallback</label>
+          <label title="When the mode switches to this mode, manual overrides are cleared — but only for covers that have at least one rule in this mode (including ↑ Priority and ↓ Default rules). Other covers are left untouched. Cleared covers will immediately move to their scheduled positions.">
+            <input type="checkbox" class="mc-force" data-mode="${mode}" ${mc.force ? 'checked' : ''}>
+            <span class="toggle-track"></span>
+            Force on switch</label>
+        </div>`;
+
       return `
         <div class="mode-section" id="mode-sec-${mode}" data-mode="${mode}">
-          <div class="section-heading${this._special.has(mode) ? ' section-special' : ''}">
+          <div class="section-heading${isSpecial ? ' section-special' : ''}">
             ${MODE_LABELS[mode] || mode}
             ${this._orphaned.has(mode) ? ' <span class="orphan-warn">⚠ not in input_select</span>' : ''}
           </div>
+          ${modeOptsHtml}
           <div class="table-card">
             <table>
               <thead>
@@ -683,7 +797,7 @@ class SmartShadesPanel extends HTMLElement {
               ${groupsHtml}
             </table>
           </div>
-          <button class="add-group-btn" data-mode="${mode}">＋ Add Covers</button>
+          <button class="add-group-btn" data-mode="${mode}">＋ Add Cover Group</button>
         </div>`;
     }).join('');
 
@@ -710,6 +824,20 @@ class SmartShadesPanel extends HTMLElement {
 
       <div class="tab-bar-wrap">
         <div class="mode-tabs">${tabsHtml}</div>
+        <div class="header-actions">
+          <button class="save-btn" id="save-btn" ${this._saving ? 'disabled' : ''}>
+            ${this._saving ? 'Saving…' : 'Save'}
+            ${this._dirty && !this._saving ? '<span class="unsaved-dot"></span>' : ''}
+          </button>
+          <div class="hamburger-wrap">
+            <button class="hamburger-btn" id="hamburger-btn" title="More options">☰</button>
+            <div class="hamburger-menu" id="hamburger-menu">
+              <button id="llm-btn">Generate LLM Prompt</button>
+              <button id="export-btn">Export</button>
+              <button id="import-btn">Import</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       ${this._error ? `<div class="error-banner" style="margin:0 0 16px">${this._error}</div>` : ''}
@@ -728,17 +856,6 @@ class SmartShadesPanel extends HTMLElement {
           <strong>↑ Priority</strong> rules are evaluated before all mode rules and override everything. &nbsp;
           <strong>↓ Default</strong> rules are evaluated only when no rule in the current mode matched a cover.
         </span>
-        <div style="display:flex; flex-direction:column; gap:12px; align-items:flex-end;">
-          <div class="tools-bar">
-            <button class="secondary-btn" id="llm-btn">Generate LLM Prompt</button>
-            <button class="secondary-btn" id="export-btn">Export</button>
-            <button class="secondary-btn" id="import-btn">Import</button>
-          </div>
-          <button class="save-btn" id="save-btn" ${this._saving ? 'disabled' : ''}>
-            ${this._saving ? 'Saving…' : 'Save'}
-            ${this._dirty && !this._saving ? '<span class="unsaved-dot"></span>' : ''}
-          </button>
-        </div>
       </div>
 
       <dialog id="import-dialog">
@@ -750,6 +867,12 @@ class SmartShadesPanel extends HTMLElement {
           <button class="save-btn" id="import-confirm">Import & Replace</button>
         </div>
       </dialog>
+
+      ${this._pendingDelete ? `
+      <div class="undo-toast">
+        <span>Cover group deleted</span>
+        <button class="undo-toast-btn" id="undo-btn">Undo</button>
+      </div>` : ''}
 
       <dialog id="fallback-dialog">
         <h3 class="dialog-title" id="fallback-title">Copy to Clipboard</h3>
@@ -793,6 +916,7 @@ class SmartShadesPanel extends HTMLElement {
     root.querySelectorAll('.del-group-btn').forEach(btn =>
       btn.addEventListener('click', () => this._deleteGroup(+btn.dataset.gidx))
     );
+    root.querySelector('#undo-btn')?.addEventListener('click', () => this._undoDelete());
     
     root.querySelectorAll('.add-rule-btn').forEach(btn =>
       btn.addEventListener('click', () => this._addRule(+btn.dataset.gidx))
@@ -886,6 +1010,31 @@ class SmartShadesPanel extends HTMLElement {
       }
     });
 
+    // ── Mode config checkboxes ────────────────────────────────────────
+    root.querySelectorAll('.mc-block-fallback').forEach(cb =>
+      cb.addEventListener('change', () => {
+        const m = cb.dataset.mode;
+        this._modeConfig[m] = { ...(this._modeConfig[m] || {}), block_fallback: cb.checked };
+        markDirty();
+      })
+    );
+    root.querySelectorAll('.mc-force').forEach(cb =>
+      cb.addEventListener('change', () => {
+        const m = cb.dataset.mode;
+        this._modeConfig[m] = { ...(this._modeConfig[m] || {}), force: cb.checked };
+        markDirty();
+      })
+    );
+
+    // ── Hamburger menu ────────────────────────────────────────────────
+    const hamburgerBtn  = root.querySelector('#hamburger-btn');
+    const hamburgerMenu = root.querySelector('#hamburger-menu');
+    hamburgerBtn?.addEventListener('click', e => {
+      e.stopPropagation();
+      hamburgerMenu.classList.toggle('open');
+    });
+    root.addEventListener('click', () => hamburgerMenu?.classList.remove('open'));
+
     // ── Tools ─────────────────────────────────────────────────────────
 
     const copyToClipboard = async (text, title) => {
@@ -977,19 +1126,30 @@ class SmartShadesPanel extends HTMLElement {
         }
       }
 
-      const prompt = `I am building a system to automate my shades in Home Assistant. 
-Unlike standard Home Assistant automations which are event-driven and based on momentary triggers, this system operates as a continuous state engine. We define declarative rules that dictate the absolute position and tilt the shades should have based on current environmental inputs (time, sun azimuth/elevation, month, presence). The system continuously evaluates these rules to ensure the physical shades always match the desired state.
-The active set of rules at any given time is chosen based on a specific input enum (the "Mode").
+      const modeConfigSummary = Object.entries(this._modeConfig)
+        .filter(([, v]) => v.block_fallback || v.force)
+        .map(([m, v]) => {
+          const flags = [];
+          if (v.block_fallback) flags.push('block_fallback');
+          if (v.force) flags.push('force_on_switch');
+          return `- ${m}: ${flags.join(', ')}`;
+        }).join('\n') || '(none)';
+
+      const prompt = `I am building a system to automate my shades in Home Assistant.
+Unlike standard Home Assistant automations which are event-driven and based on momentary triggers, this system operates as a continuous state engine. Declarative rules dictate the absolute position and tilt that covers should have based on current environmental inputs (time, sun azimuth/elevation, month, presence). The system evaluates rules periodically and on sun/mode changes, and moves covers to match the desired state.
+The active set of rules is chosen based on a specific input_select entity (the "Mode").
 
 ### System State
-Available Modes (Input Enum): ${this._modes.join(', ')}
+Available Modes: ${this._modes.join(', ')}
 
 Available Covers:
 ${coversPrompt}
 
-### Rule Format
-The rules are an array of JSON objects. Each object is a "Group" and targets one mode.
-Format:
+### Data Structure
+There are two top-level objects stored together:
+
+**1. rules** — array of groups. Each group targets one mode and one set of covers, with an ordered list of condition→action rules. The first rule whose conditions all match is applied to the covers in that group; subsequent rules in the same group are ignored for those covers.
+
 \`\`\`json
 [
   {
@@ -998,25 +1158,47 @@ Format:
     "rules": [
       {
         "conditions": [
-          {"var": "azimuth", "op": ">", "val": 150},
+          {"var": "azimuth",   "op": ">",  "val": 150},
           {"var": "elevation", "op": ">=", "val": 5},
-          {"var": "time", "op": ">", "val": 830},
-          {"var": "month", "op": ">=", "val": 6},
-          {"var": "presence", "op": "==", "val": "home"}
+          {"var": "time",      "op": ">",  "val": 830},
+          {"var": "month",     "op": ">=", "val": 6},
+          {"var": "presence",  "op": "==", "val": "home"}
         ],
-        "action": {"position": 0, "tilt": null}
+        "action": {"position": 0, "tilt": 50}
+      },
+      {
+        "conditions": [],
+        "action": {"position": 100}
       }
     ]
   }
 ]
 \`\`\`
 
-### Rule Engine Process
-- A group defines rules for a specific mode and a specific set of covers.
-- Time is specified as HHMM (integer). e.g., 08:30 is 830. 19:00 is 1900.
-- For each cover in a mode, the first rule that matches its conditions will be executed. Subsequent rules in the same group are ignored for that cover.
-- Special Mode "_priority": Evaluated before all other modes. Overrides everything.
-- Special Mode "_fallback": Evaluated only if no rule matched the cover in the current mode or priority mode.
+Condition variables: "azimuth" (degrees 0–360), "elevation" (degrees, negative when below horizon), "time" (HHMM integer — 08:30 → 830, 19:00 → 1900), "month" (1–12), "presence" ("home" or "away", requires a presence entity configured at setup).
+Operators: ">", ">=", "<", "<=", "==". All conditions in a rule are ANDed.
+An empty conditions array ("conditions": []) is a catch-all — it always matches unconditionally. Place it as the last rule in a group to act as a default/fallback for that group's covers when no earlier rule's conditions were met.
+Action fields: "position" (0–100, omit to leave position unchanged), "tilt" (0–100, omit to leave tilt unchanged). At least one must be present.
+
+**2. mode_config** — optional per-mode flags, keyed by mode name:
+
+\`\`\`json
+{
+  "REGEN":   { "block_fallback": true,  "force": true  },
+  "KUEHLEN": { "block_fallback": false, "force": false }
+}
+\`\`\`
+
+- **block_fallback**: When true for the active mode, the _fallback pass is skipped entirely. Covers not matched by priority or mode rules are left untouched. Useful for modes like REGEN where you only want to control specific covers.
+- **force**: When the mode switches to this mode, all manual overrides are immediately cleared before evaluation runs. Every cover moves to its scheduled position regardless of prior manual adjustments.
+
+### Evaluation Order (3-pass)
+1. **_priority** groups run first, regardless of which mode is active. Use for rules that must always apply (e.g. retract awnings at night or during rain).
+2. **Current mode** groups run next. Groups are evaluated top-to-bottom; the first group whose conditions match claims its covers. A cover claimed here cannot be overwritten by later groups.
+3. **_fallback** groups run last, only for covers not yet claimed by priority or mode rules. Skipped entirely if block_fallback is set for the active mode.
+
+### Current Mode Config
+${modeConfigSummary}
 
 ### Current Rules
 \`\`\`json

@@ -13,4 +13,7 @@ ssh root@homeassistant.local "cd /config/custom_components && tar -xzf deploy.ta
 echo "Cleaning up local bundle..."
 rm deploy.tar.gz
 
-echo "Done! You may need to restart Home Assistant for python backend changes."
+echo "Restarting Home Assistant..."
+ssh root@homeassistant.local "ha core restart"
+
+echo "Done."
