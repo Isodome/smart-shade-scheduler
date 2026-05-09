@@ -135,7 +135,7 @@ def test_priority_does_not_block_fallback_for_other_covers():
 def test_no_mode_match_uses_fallback():
     groups = [
         {
-            "mode": "KUEHLEN",
+            "mode": "COOLING",
             "covers": ["cover.a"],
             "rules": [{"action": {"position": 0}}]
         },
@@ -199,46 +199,46 @@ def test_tilt_only():
     assert result["cover.a"] == {"p": None, "t": 100}
 
 
-# ── Real-world KUEHLEN scenario ───────────────────────────────────────────────
+# ── Real-world COOLING scenario ───────────────────────────────────────────────
 
-def test_kuehlen_southwest_scenario():
+def test_cooling_southwest_scenario():
     groups = [
         # priority: retract awnings at night
         {
             "mode": "_priority",
-            "covers": ["cover.markise"],
+            "covers": ["cover.awning"],
             "rules": [{"conditions": [{"var": "elevation", "op": "<", "val": 0}], "action": {"position": 100}}]
         },
-        # KUEHLEN: west sun → balkon awnings at 60%
+        # COOLING: west sun → balkon awnings at 60%
         {
-            "mode": "KUEHLEN",
-            "covers": ["cover.markise"],
+            "mode": "COOLING",
+            "covers": ["cover.awning"],
             "rules": [{"conditions": [{"var": "azimuth", "op": ">", "val": 200}, {"var": "elevation", "op": ">", "val": 5}], "action": {"position": 60}}]
         },
-        # KUEHLEN: south sun → main storen closed
+        # COOLING: south sun → main blind closed
         {
-            "mode": "KUEHLEN",
-            "covers": ["cover.stor_wz"],
+            "mode": "COOLING",
+            "covers": ["cover.blind_living"],
             "rules": [{"conditions": [{"var": "azimuth", "op": ">", "val": 185}, {"var": "elevation", "op": ">", "val": 5}], "action": {"position": 0, "tilt": 0}}]
         },
         # fallback: open at night
         {
             "mode": "_fallback",
-            "covers": ["cover.markise"],
+            "covers": ["cover.awning"],
             "rules": [{"conditions": [{"var": "elevation", "op": "<", "val": 0}], "action": {"position": 100}}]
         }
     ]
 
-    # Afternoon, az=210, el=15 → KUEHLEN west rule fires for markise
-    r = eval(groups, mode="KUEHLEN", azimuth=210, elevation=15, hour=15)
-    assert r["cover.markise"]["p"] == 60
-    assert r["cover.stor_wz"]["p"] == 0
+    # Afternoon, az=210, el=15 → COOLING west rule fires for awning
+    r = eval(groups, mode="COOLING", azimuth=210, elevation=15, hour=15)
+    assert r["cover.awning"]["p"] == 60
+    assert r["cover.blind_living"]["p"] == 0
 
-    # Low sun (el=3) → azimuth_above:200 + elevation_above:5 fails → no KUEHLEN match
+    # Low sun (el=3) → azimuth_above:200 + elevation_above:5 fails → no COOLING match
     # fallback also has elevation_below:0 which fails at el=3 → cover not in result
-    r = eval(groups, mode="KUEHLEN", azimuth=210, elevation=3, hour=18)
-    assert "cover.markise" not in r
+    r = eval(groups, mode="COOLING", azimuth=210, elevation=3, hour=18)
+    assert "cover.awning" not in r
 
-    # Night (el=-5) → priority claims markise → position 100
-    r = eval(groups, mode="KUEHLEN", azimuth=0, elevation=-5, hour=22)
-    assert r["cover.markise"]["p"] == 100
+    # Night (el=-5) → priority claims awning → position 100
+    r = eval(groups, mode="COOLING", azimuth=0, elevation=-5, hour=22)
+    assert r["cover.awning"]["p"] == 100

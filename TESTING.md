@@ -43,22 +43,22 @@ def test_rule_matches_azimuth():
 
 def test_fill_targets_first_match_wins():
     rules = [
-        {"mode": "KUEHLEN", "covers": ["cover.a"], "position": 0},
-        {"mode": "KUEHLEN", "covers": ["cover.a"], "position": 50},  # should be skipped
+        {"mode": "COOLING", "covers": ["cover.a"], "position": 0},
+        {"mode": "COOLING", "covers": ["cover.a"], "position": 50},  # should be skipped
     ]
     targets = {}
-    ShadeManager._fill_targets("KUEHLEN", rules, targets, azimuth=200, elevation=10, hour=14, minute=0)
+    ShadeManager._fill_targets("COOLING", rules, targets, azimuth=200, elevation=10, hour=14, minute=0)
     assert targets["cover.a"]["p"] == 0
 
 def test_three_pass_priority_wins():
     rules = [
         {"mode": "_priority", "covers": ["cover.a"], "elevation_below": 0, "position": 100},
-        {"mode": "KUEHLEN",   "covers": ["cover.a"], "position": 0},
+        {"mode": "COOLING",   "covers": ["cover.a"], "position": 0},
     ]
     targets = {}
     ShadeManager._fill_targets("_priority", rules, targets, 0, -5, 3, 0)
-    ShadeManager._fill_targets("KUEHLEN",   rules, targets, 0, -5, 3, 0)
-    assert targets["cover.a"]["p"] == 100  # priority rule won; KUEHLEN rule skipped
+    ShadeManager._fill_targets("COOLING",   rules, targets, 0, -5, 3, 0)
+    assert targets["cover.a"]["p"] == 100  # priority rule won; COOLING rule skipped
 ```
 
 ---

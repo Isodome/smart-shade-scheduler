@@ -1153,8 +1153,8 @@ There are two top-level objects stored together:
 \`\`\`json
 [
   {
-    "mode": "KUEHLEN",
-    "covers": ["cover.storen_buero", "cover.storen_buero_2"],
+    "mode": "COOLING",
+    "covers": ["cover.blind_office", "cover.blind_office_2"],
     "rules": [
       {
         "conditions": [
@@ -1184,12 +1184,12 @@ Action fields: "position" (0–100, omit to leave position unchanged), "tilt" (0
 
 \`\`\`json
 {
-  "REGEN":   { "block_fallback": true,  "force": true  },
-  "KUEHLEN": { "block_fallback": false, "force": false }
+  "RAIN":    { "block_fallback": true,  "force": true  },
+  "COOLING": { "block_fallback": false, "force": false }
 }
 \`\`\`
 
-- **block_fallback**: When true for the active mode, the _fallback pass is skipped entirely. Covers not matched by priority or mode rules are left untouched. Useful for modes like REGEN where you only want to control specific covers.
+- **block_fallback**: When true for the active mode, the _fallback pass is skipped entirely. Covers not matched by priority or mode rules are left untouched. Useful for modes like RAIN where you only want to control specific covers.
 - **force**: When the mode switches to this mode, all manual overrides are immediately cleared before evaluation runs. Every cover moves to its scheduled position regardless of prior manual adjustments.
 
 ### Evaluation Order (3-pass)
