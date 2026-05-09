@@ -116,6 +116,26 @@ def evaluate_rules(
     return targets
 
 
+def normalize_groups(rules: list) -> list:
+    """Expand old {rules:[{conditions,action},...]} groups to flat {conditions,action} groups.
+
+    Idempotent: groups already in the new flat format are passed through unchanged.
+    """
+    out = []
+    for g in rules:
+        if "rules" in g:
+            for r in g["rules"]:
+                out.append({
+                    "mode":       g.get("mode"),
+                    "covers":     g.get("covers", []),
+                    "conditions": r.get("conditions", []),
+                    "action":     r.get("action", {}),
+                })
+        else:
+            out.append(g)
+    return out
+
+
 def is_dnd_active(start_str: str, end_str: str, now: time) -> bool:
     """Return True if *now* falls within the DND window."""
     try:
