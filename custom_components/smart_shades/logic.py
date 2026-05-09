@@ -46,9 +46,9 @@ def rule_matches(
             continue
 
         if var == "workday":
-            if expected == "workday" and workday is not True:
+            if expected == "work" and workday is not True:
                 return False
-            if expected == "dayoff" and workday is not False:
+            if expected == "nowork" and workday is not False:
                 return False
             continue
 

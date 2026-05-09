@@ -24,15 +24,15 @@ export function parseCondition(str) {
   const tokens = str.trim().split(/\s+/);
   if (tokens.some(t => /^home$/i.test(t)))    conditions.push({var: 'presence', op: '==', val: 'home'});
   if (tokens.some(t => /^away$/i.test(t)))    conditions.push({var: 'presence', op: '==', val: 'away'});
-  if (tokens.some(t => /^workday$/i.test(t))) conditions.push({var: 'workday',  op: '==', val: 'workday'});
-  if (tokens.some(t => /^dayoff$/i.test(t)))  conditions.push({var: 'workday',  op: '==', val: 'dayoff'});
+  if (tokens.some(t => /^work$/i.test(t)))   conditions.push({var: 'workday', op: '==', val: 'work'});
+  if (tokens.some(t => /^nowork$/i.test(t))) conditions.push({var: 'workday', op: '==', val: 'nowork'});
   return conditions;
 }
 
 /** Returns {ok: bool, bad: string[]} */
 export function validateCondition(str) {
   if (!str.trim()) return { ok: true, bad: [] };
-  const remaining = str.replace(/\s+/g, '').replace(_TOKEN_RE, '').replace(/home|away|workday|dayoff/gi, '');
+  const remaining = str.replace(/\s+/g, '').replace(_TOKEN_RE, '').replace(/home|away|nowork|work/gi, '');
   return remaining ? { ok: false, bad: [remaining] } : { ok: true, bad: [] };
 }
 
@@ -45,12 +45,12 @@ export function formatCondition(conditions) {
   // Handle presence
   const hasHome    = conditions.some(c => c.var === 'presence' && c.val === 'home');
   const hasAway    = conditions.some(c => c.var === 'presence' && c.val === 'away');
-  const hasWorkday = conditions.some(c => c.var === 'workday'  && c.val === 'workday');
-  const hasDayoff  = conditions.some(c => c.var === 'workday'  && c.val === 'dayoff');
-  if (hasHome)    parts.push('home');
-  if (hasAway)    parts.push('away');
-  if (hasWorkday) parts.push('workday');
-  if (hasDayoff)  parts.push('dayoff');
+  const hasWork   = conditions.some(c => c.var === 'workday' && c.val === 'work');
+  const hasNowork = conditions.some(c => c.var === 'workday' && c.val === 'nowork');
+  if (hasHome)   parts.push('home');
+  if (hasAway)   parts.push('away');
+  if (hasWork)   parts.push('work');
+  if (hasNowork) parts.push('nowork');
 
   for (const cond of conditions) {
     if (cond.var === 'presence') continue;
