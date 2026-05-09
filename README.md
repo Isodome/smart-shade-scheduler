@@ -31,6 +31,7 @@ Each rule optionally specifies conditions (space-separated tokens):
 | `t>8:00` / `t>=8:00` / `t<22:00` / `t<=22:00` / `t==8:30` | Time of day (HH:MM) |
 | `mo>=4` / `mo<=9` | Month (1–12) |
 | `home` / `away` | Presence (requires a presence entity at setup) |
+| `workday` / `dayoff` | Workday / day off — defaults to Mon–Fri / Sat–Sun, overridable by a binary sensor at setup (compatible with the HA Workday integration) |
 
 Multiple tokens are ANDed. An empty condition field is a catch-all that always matches.
 
@@ -149,7 +150,7 @@ An automation sets this entity based on weather forecast, time of day, or manual
 - **Temporary-position service** — set a cover position/tilt that holds only until the next rule evaluation, without triggering the manual-override timer. Useful for one-off adjustments that should self-correct.
 - **One-shot rule flag** — mark a rule as "fire once per day". After it fires for a cover, the cover is left alone until the daily reset, even if conditions remain true. Useful for morning-open rules that should not re-enforce after a manual adjustment.
 - **Crossing conditions (`t=`, `az=`)** — trigger a rule exactly when a threshold is crossed (e.g. `t=7:30` fires once at 07:30, `az=185` fires when the sun crosses 185°), rather than continuously re-evaluating a range. Pairs naturally with the one-shot flag.
-- **Weekday / workday condition** — add `wd` (weekday, Mon–Fri) and `we` (weekend) bare tokens, plus optional integration with HA's Workday binary sensor for public holiday awareness.
+- ~~**Weekday / workday condition**~~ — done. `workday`/`dayoff` tokens, Mon–Fri default, optional binary sensor override (e.g. HA Workday integration for public holidays).
 
 ### Backlog
 - **Cover groups** — use a group entity or named list as a single cover target, so one rule can manage many covers without listing each one.

@@ -851,7 +851,8 @@ class SmartShadesPanel extends HTMLElement {
           <code>el&gt;5</code> <code>el&lt;30</code> elevation &nbsp;
           <code>t&gt;=8:30</code> <code>t&lt;22:00</code> <code>t==8:00</code> time &nbsp;
           <code>mo&gt;=6</code> <code>mo&lt;=8</code> month (1–12) &nbsp;
-          <code>home</code> <code>away</code> presence<br>
+          <code>home</code> <code>away</code> presence &nbsp;
+          <code>workday</code> <code>dayoff</code> workday<br>
           First matching rule wins per cover. ⚠ = manual override active.<br>
           <strong>↑ Priority</strong> rules are evaluated before all mode rules and override everything. &nbsp;
           <strong>↓ Default</strong> rules are evaluated only when no rule in the current mode matched a cover.
@@ -1175,7 +1176,7 @@ There are two top-level objects stored together:
 ]
 \`\`\`
 
-Condition variables: "azimuth" (degrees 0–360), "elevation" (degrees, negative when below horizon), "time" (HHMM integer — 08:30 → 830, 19:00 → 1900), "month" (1–12), "presence" ("home" or "away", requires a presence entity configured at setup).
+Condition variables: "azimuth" (degrees 0–360), "elevation" (degrees, negative when below horizon), "time" (HHMM integer — 08:30 → 830, 19:00 → 1900), "month" (1–12), "presence" ("home" or "away", requires a presence entity at setup), "workday" ("workday" = Mon–Fri or sensor on, "dayoff" = Sat–Sun or sensor off; optionally overridden by a binary_sensor at setup).
 Operators: ">", ">=", "<", "<=", "==". All conditions in a rule are ANDed.
 An empty conditions array ("conditions": []) is a catch-all — it always matches unconditionally. Place it as the last rule in a group to act as a default/fallback for that group's covers when no earlier rule's conditions were met.
 Action fields: "position" (0–100, omit to leave position unchanged), "tilt" (0–100, omit to leave tilt unchanged). At least one must be present.

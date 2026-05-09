@@ -21,6 +21,7 @@ RULE_TILT = "tilt"
 CONF_DND_ENTITY = "dnd_entity"           # binary_sensor: on = DND active
 CONF_OVERRIDE_DURATION_ENTITY = "override_duration_entity"
 CONF_PRESENCE_ENTITY = "presence_entity" # zone/binary_sensor/person/device_tracker
+CONF_WORKDAY_ENTITY  = "workday_entity"  # binary_sensor: on = workday, off = day off
 CONF_MODE_CONFIG     = "mode_config"     # dict: mode → {block_fallback, force}
 
 # Reserved mode keys — always present, never orphaned

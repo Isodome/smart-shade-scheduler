@@ -23,6 +23,7 @@ from .const import (
     CONF_OVERRIDE_DURATION_ENTITY,
     CONF_PRESENCE_ENTITY,
     CONF_RULES,
+    CONF_WORKDAY_ENTITY,
     CONF_TOLERANCE,
     CONF_WIPE_TIME,
     DEFAULT_DND_END,
@@ -319,6 +320,15 @@ class ShadeManager:
     def _tolerance(self) -> int:
         return int(self._opt(CONF_TOLERANCE, DEFAULT_TOLERANCE))
 
+    def _workday(self) -> bool:
+        """Return True on workdays. Uses binary sensor if configured, otherwise Mon–Fri."""
+        entity = self.entry.data.get(CONF_WORKDAY_ENTITY)
+        if entity:
+            state = self.hass.states.get(entity)
+            if state:
+                return state.state == "on"
+        return datetime.now().weekday() < 5  # 0=Mon … 4=Fri are workdays
+
     def _presence(self) -> bool | None:
         entity = self.entry.data.get(CONF_PRESENCE_ENTITY)
         if not entity:
@@ -368,9 +378,10 @@ class ShadeManager:
         presence = self._presence()
         mode_cfg = self.entry.options.get(CONF_MODE_CONFIG, {})
         block_fallback = mode_cfg.get(current_mode, {}).get("block_fallback", False)
+        workday = self._workday()
         ctx = (azimuth, elevation, time_hhmm, month)
 
-        shade_targets = evaluate_rules(groups, current_mode, *ctx, presence, block_fallback)
+        shade_targets = evaluate_rules(groups, current_mode, *ctx, presence, block_fallback, workday)
 
         for entity_id, target in shade_targets.items():
             state = self.hass.states.get(entity_id)

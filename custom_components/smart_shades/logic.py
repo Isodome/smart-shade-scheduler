@@ -19,6 +19,7 @@ def rule_matches(
     time_hhmm: int,
     month: int = 1,
     presence: bool | None = None,
+    workday: bool | None = None,
 ) -> bool:
     """Return True if all conditions are satisfied.
 
@@ -44,6 +45,13 @@ def rule_matches(
                 return False
             continue
 
+        if var == "workday":
+            if expected == "workday" and workday is not True:
+                return False
+            if expected == "dayoff" and workday is not False:
+                return False
+            continue
+
         if var not in vals or op_str not in _OPS:
             continue  # unknown var/op — ignore silently
 
@@ -62,6 +70,7 @@ def fill_targets(
     time_hhmm: int,
     month: int = 1,
     presence: bool | None = None,
+    workday: bool | None = None,
 ) -> None:
     """Apply first-matching rule per group for *mode* to covers not yet in *targets*."""
     for group in groups:
@@ -69,7 +78,7 @@ def fill_targets(
             continue
         covers = group.get("covers", [])
         for rule in group.get("rules", []):
-            if not rule_matches(rule.get("conditions", []), azimuth, elevation, time_hhmm, month, presence):
+            if not rule_matches(rule.get("conditions", []), azimuth, elevation, time_hhmm, month, presence, workday):
                 continue
             action = rule.get("action", {})
             p = action.get("position")
@@ -91,6 +100,7 @@ def evaluate_rules(
     month: int = 1,
     presence: bool | None = None,
     block_fallback: bool = False,
+    workday: bool | None = None,
 ) -> dict:
     """Run the full 3-pass evaluation and return the shade targets dict.
 
@@ -98,11 +108,11 @@ def evaluate_rules(
     block_fallback: when True, the fallback pass is skipped entirely.
     """
     targets: dict = {}
-    fill_targets("_priority",  groups, targets, azimuth, elevation, time_hhmm, month, presence)
+    fill_targets("_priority",  groups, targets, azimuth, elevation, time_hhmm, month, presence, workday)
     if current_mode:
-        fill_targets(current_mode, groups, targets, azimuth, elevation, time_hhmm, month, presence)
+        fill_targets(current_mode, groups, targets, azimuth, elevation, time_hhmm, month, presence, workday)
     if not block_fallback:
-        fill_targets("_fallback",  groups, targets, azimuth, elevation, time_hhmm, month, presence)
+        fill_targets("_fallback",  groups, targets, azimuth, elevation, time_hhmm, month, presence, workday)
     return targets
 
 
