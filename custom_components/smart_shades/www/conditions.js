@@ -53,7 +53,7 @@ export function formatCondition(conditions) {
   if (hasNowork) parts.push('nowork');
 
   for (const cond of conditions) {
-    if (cond.var === 'presence') continue;
+    if (cond.var === 'presence' || cond.var === 'workday') continue;
     let v = cond.val;
     if (cond.var === 'time') {
       const strV = String(v).padStart(3, '0');

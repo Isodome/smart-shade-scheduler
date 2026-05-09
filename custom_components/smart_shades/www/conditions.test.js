@@ -6,6 +6,9 @@ test('parses all operators', () => {
   expect(parseCondition('t==8:00')).toEqual([{ var: 'time', op: '==', val: 800 }]);
   expect(parseCondition('mo<=8')).toEqual([{ var: 'month', op: '<=', val: 8 }]);
   expect(parseCondition('home')).toEqual([{ var: 'presence', op: '==', val: 'home' }]);
+  expect(parseCondition('away')).toEqual([{ var: 'presence', op: '==', val: 'away' }]);
+  expect(parseCondition('work')).toEqual([{ var: 'workday', op: '==', val: 'work' }]);
+  expect(parseCondition('nowork')).toEqual([{ var: 'workday', op: '==', val: 'nowork' }]);
 });
 
 test('parses multiple conditions', () => {
@@ -39,4 +42,20 @@ test('validates bad tokens', () => {
   expect(validateCondition('az>150 foo').ok).toBe(false);
   expect(validateCondition('az>150').ok).toBe(true);
   expect(validateCondition('').ok).toBe(true);
+  expect(validateCondition('work').ok).toBe(true);
+  expect(validateCondition('nowork').ok).toBe(true);
+  expect(validateCondition('home').ok).toBe(true);
+  expect(validateCondition('away').ok).toBe(true);
+});
+
+test('work and nowork round-trip', () => {
+  expect(formatCondition(parseCondition('work'))).toBe('work');
+  expect(formatCondition(parseCondition('nowork'))).toBe('nowork');
+});
+
+test('bare tokens combine with numeric conditions', () => {
+  const result = parseCondition('work t>=800 t<1700');
+  expect(result).toContainEqual({ var: 'workday', op: '==', val: 'work' });
+  expect(result).toContainEqual({ var: 'time', op: '>=', val: 800 });
+  expect(result).toContainEqual({ var: 'time', op: '<', val: 1700 });
 });
