@@ -25,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 _PANEL_URL = "smart-shades"
 _STATIC_URL = "/smart_shades_static"
 _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
-_JS_VERSION = "36"  # bump to bust the browser cache
+_JS_VERSION = "37"  # bump to bust the browser cache
 
 
 async def async_setup(hass: HomeAssistant) -> None:
