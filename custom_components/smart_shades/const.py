@@ -20,9 +20,22 @@ RULE_TILT = "tilt"
 # Optional helper entities that override manually-entered values
 CONF_DND_ENTITY = "dnd_entity"           # binary_sensor: on = DND active
 CONF_OVERRIDE_DURATION_ENTITY = "override_duration_entity"
-CONF_PRESENCE_ENTITY = "presence_entity" # zone/binary_sensor/person/device_tracker
-CONF_WORKDAY_ENTITY  = "workday_entity"  # binary_sensor: on = workday, off = day off
 CONF_MODE_CONFIG     = "mode_config"     # dict: mode → {block_fallback, force}
+
+# Built-in condition variables.
+# To add a new one: append an entry here — nothing else needs changing.
+#   ha_entity : HA entity_id to read, or None for synthetic vars
+#   ha_attr   : attribute name on the entity, or sentinel for synthetic vars:
+#               "time"  → current HHMM integer
+#               "month" → current month integer
+BUILT_IN_VARS = [
+    {"short": "az", "long": "azimuth",   "type": "number", "ha_entity": "sun.sun", "ha_attr": "azimuth"},
+    {"short": "el", "long": "elevation", "type": "number", "ha_entity": "sun.sun", "ha_attr": "elevation"},
+    {"short": "t",  "long": "time",      "type": "time",   "ha_entity": None,      "ha_attr": "time"},
+    {"short": "mo", "long": "month",     "type": "number", "ha_entity": None,      "ha_attr": "month"},
+    {"short": "d",  "long": "day",       "type": "number", "ha_entity": None,      "ha_attr": "weekday"},
+]
+CONF_CUSTOM_VARS     = "custom_vars"     # str: multiline "name=entity_id" or "name={{template}}"
 
 # Reserved mode keys — always present, never orphaned
 PRIORITY_MODE = "_priority"

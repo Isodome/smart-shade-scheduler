@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re as _re
 from datetime import datetime, time, timedelta
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
@@ -14,6 +15,8 @@ from homeassistant.helpers.event import (
 
 from .logic import evaluate_rules, fill_targets, is_dnd_active, rule_matches
 from .const import (
+    BUILT_IN_VARS,
+    CONF_CUSTOM_VARS,
     CONF_DND_END,
     CONF_DND_ENTITY,
     CONF_DND_START,
@@ -21,9 +24,7 @@ from .const import (
     CONF_MODE_ENTITY,
     CONF_OVERRIDE_DURATION,
     CONF_OVERRIDE_DURATION_ENTITY,
-    CONF_PRESENCE_ENTITY,
     CONF_RULES,
-    CONF_WORKDAY_ENTITY,
     CONF_TOLERANCE,
     CONF_WIPE_TIME,
     DEFAULT_DND_END,
@@ -36,6 +37,53 @@ from .const import (
     PRIORITY_MODE,
     SCAN_INTERVAL_MINUTES,
 )
+
+
+def _resolve_builtin(var_spec: dict, hass, now: datetime) -> float | None:
+    """Resolve a single BUILT_IN_VAR entry to its current float value."""
+    entity = var_spec.get("ha_entity")
+    attr   = var_spec.get("ha_attr")
+    if entity is None:
+        if attr == "time":    return float(now.hour * 100 + now.minute)
+        if attr == "month":   return float(now.month)
+        if attr == "weekday": return float(now.weekday())  # 0=Mon … 6=Sun
+        return None
+    state = hass.states.get(entity)
+    if state is None:
+        return None
+    if attr:
+        try:
+            return float(state.attributes.get(attr, 0))
+        except (ValueError, TypeError):
+            return None
+    return _coerce_state(state.state)
+
+
+def _coerce_state(state_str: str) -> float | None:
+    """Coerce an entity state string to float for use as a condition variable."""
+    # ISO datetime with timezone → HHMM in local time
+    try:
+        from homeassistant.util import dt as dt_util
+        dt = datetime.fromisoformat(state_str)
+        if dt.tzinfo is not None:
+            dt = dt_util.as_local(dt)
+        return float(dt.hour * 100 + dt.minute)
+    except (ValueError, TypeError, AttributeError):
+        pass
+    # HH:MM or HH:MM:SS
+    m = _re.match(r"^(\d{1,2}):(\d{2})", state_str)
+    if m:
+        return float(int(m.group(1)) * 100 + int(m.group(2)))
+    # Numeric string
+    try:
+        return float(state_str)
+    except (ValueError, TypeError):
+        pass
+    # on / off
+    low = state_str.lower()
+    if low == "on":  return 1.0
+    if low == "off": return 0.0
+    return None
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,6 +173,9 @@ class ShadeManager:
         # Seconds after a command during which divergence checks are suppressed
         # (cover may still be travelling to its commanded position)
         self._TRANSIT_GRACE = 90
+
+        self._prev_vals: dict | None = None
+        self._var_values: dict[str, float | None] = {}   # built-ins + custom, last eval
 
         self._unsub: list = []
         self._wipe_unsub = None
@@ -320,30 +371,35 @@ class ShadeManager:
     def _tolerance(self) -> int:
         return int(self._opt(CONF_TOLERANCE, DEFAULT_TOLERANCE))
 
-    def _workday(self) -> bool:
-        """Return True on workdays. Uses binary sensor if configured, otherwise Mon–Fri."""
-        entity = self.entry.data.get(CONF_WORKDAY_ENTITY)
-        if entity:
-            state = self.hass.states.get(entity)
-            if state:
-                return state.state == "on"
-        return datetime.now().weekday() < 5  # 0=Mon … 4=Fri are workdays
-
-    def _presence(self) -> bool | None:
-        entity = self.entry.data.get(CONF_PRESENCE_ENTITY)
-        if not entity:
-            return None
-        state = self.hass.states.get(entity)
-        if not state:
-            return None
-        if entity.startswith("zone."):
-            try:
-                return int(state.state) > 0
-            except (ValueError, TypeError):
-                return None
-        if entity.startswith("binary_sensor."):
-            return state.state == "on"
-        return state.state == "home"  # person.*, device_tracker.*
+    async def _resolve_custom_vars(self) -> dict[str, float | None]:
+        """Parse the custom_vars option and resolve each binding to float | None."""
+        from homeassistant.helpers.template import Template
+        text = self.entry.options.get(CONF_CUSTOM_VARS, "")
+        result: dict[str, float | None] = {}
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            name, _, source = line.partition("=")
+            name = name.strip().lower()
+            source = source.strip()
+            if not name:
+                continue
+            if source.startswith("{{") and source.endswith("}}"):
+                try:
+                    rendered = Template(source, self.hass).async_render()
+                    result[name] = _coerce_state(str(rendered))
+                except Exception:
+                    result[name] = None
+            else:
+                state = self.hass.states.get(source)
+                if state is None or state.state in ("unavailable", "unknown"):
+                    result[name] = None
+                else:
+                    result[name] = _coerce_state(state.state)
+        return result
 
     async def async_evaluate_rules(self) -> None:
         """Evaluate rules, moving covers as needed. Skips overridden covers."""
@@ -363,25 +419,26 @@ class ShadeManager:
         mode_state = self.hass.states.get(mode_entity) if mode_entity else None
         current_mode = mode_state.state if mode_state else None
 
-        sun = self.hass.states.get("sun.sun")
-        if not sun:
-            return
-
-        azimuth = float(sun.attributes.get("azimuth", 0))
-        elevation = float(sun.attributes.get("elevation", 0))
         tolerance = self._tolerance()
         now = datetime.now()
 
         groups = self.entry.options.get(CONF_RULES, [])
-        hour, minute, month = now.hour, now.minute, now.month
-        time_hhmm = hour * 100 + minute
-        presence = self._presence()
         mode_cfg = self.entry.options.get(CONF_MODE_CONFIG, {})
         block_fallback = mode_cfg.get(current_mode, {}).get("block_fallback", False)
-        workday = self._workday()
-        ctx = (azimuth, elevation, time_hhmm, month)
 
-        shade_targets = evaluate_rules(groups, current_mode, *ctx, presence, block_fallback, workday)
+        # Resolve all built-in variables from BUILT_IN_VARS spec
+        cur_vals: dict = {v["short"]: _resolve_builtin(v, self.hass, now) for v in BUILT_IN_VARS}
+
+        # Resolve custom variables and merge (built-ins take precedence)
+        custom_vars = await self._resolve_custom_vars()
+        for name, value in custom_vars.items():
+            if name not in cur_vals:
+                cur_vals[name] = value
+
+        self._var_values = dict(cur_vals)
+
+        shade_targets = evaluate_rules(groups, current_mode, cur_vals, self._prev_vals, block_fallback)
+        self._prev_vals = cur_vals
 
         for entity_id, target in shade_targets.items():
             state = self.hass.states.get(entity_id)
@@ -468,37 +525,33 @@ class ShadeManager:
         cur_pos,
         cur_tilt,
     ) -> None:
-        # Phantom-52 workaround: some Somfy covers briefly report position 52
-        # when fully closed; use 51 to avoid an endless correction loop.
-        final_pos = 51 if pos == 52 else pos
-
         needs_move = False
-        if final_pos is not None and cur_pos is not None:
-            needs_move = abs(int(cur_pos) - final_pos) > tolerance
+        if pos is not None and cur_pos is not None:
+            needs_move = abs(int(cur_pos) - pos) > tolerance
         if not needs_move and tilt is not None and cur_tilt is not None:
             needs_move = abs(int(cur_tilt) - tilt) > tolerance
 
         # Always record the scheduled target so the divergence check can detect
         # manual moves even when the cover was already at the right position
         # and no service call was needed.
-        self._last_commanded[entity_id] = {"p": final_pos, "t": tilt, "ts": datetime.now()}
+        self._last_commanded[entity_id] = {"p": pos, "t": tilt, "ts": datetime.now()}
 
         if not needs_move:
             return
 
-        if final_pos is not None:
-            if final_pos == 100:
+        if pos is not None:
+            if pos == 100:
                 await self.hass.services.async_call(
                     "cover", "open_cover", {"entity_id": entity_id}
                 )
-            elif final_pos == 0:
+            elif pos == 0:
                 await self.hass.services.async_call(
                     "cover", "close_cover", {"entity_id": entity_id}
                 )
             else:
                 await self.hass.services.async_call(
                     "cover", "set_cover_position",
-                    {"entity_id": entity_id, "position": final_pos},
+                    {"entity_id": entity_id, "position": pos},
                 )
         if tilt is not None:
             await self.hass.services.async_call(

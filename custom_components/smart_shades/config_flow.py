@@ -12,8 +12,6 @@ from .const import (
     CONF_MODE_ENTITY,
     CONF_OVERRIDE_DURATION,
     CONF_OVERRIDE_DURATION_ENTITY,
-    CONF_PRESENCE_ENTITY,
-    CONF_WORKDAY_ENTITY,
     CONF_TOLERANCE,
     CONF_WIPE_TIME,
     DEFAULT_DND_END,
@@ -91,10 +89,6 @@ class SmartShadesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data[CONF_OVERRIDE_DURATION_ENTITY] = (
                         user_input[CONF_OVERRIDE_DURATION_ENTITY]
                     )
-                if user_input.get(CONF_PRESENCE_ENTITY):
-                    data[CONF_PRESENCE_ENTITY] = user_input[CONF_PRESENCE_ENTITY]
-                if user_input.get(CONF_WORKDAY_ENTITY):
-                    data[CONF_WORKDAY_ENTITY] = user_input[CONF_WORKDAY_ENTITY]
                 return self.async_create_entry(
                     title="Smart Shade Scheduler", data=data
                 )
@@ -107,24 +101,12 @@ class SmartShadesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         selector.EntitySelectorConfig(domain="input_select")
                     ),
                     vol.Optional(CONF_DND_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="binary_sensor"
-                        )
+                        selector.EntitySelectorConfig(domain="binary_sensor")
                     ),
                     vol.Optional(
                         CONF_OVERRIDE_DURATION_ENTITY
                     ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="input_number"
-                        )
-                    ),
-                    vol.Optional(CONF_PRESENCE_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain=["zone", "binary_sensor", "person", "device_tracker"]
-                        )
-                    ),
-                    vol.Optional(CONF_WORKDAY_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="binary_sensor")
+                        selector.EntitySelectorConfig(domain="input_number")
                     ),
                 }
             ),

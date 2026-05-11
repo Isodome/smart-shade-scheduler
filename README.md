@@ -22,7 +22,9 @@ Rules are evaluated in strict priority order for each cover:
 Within each pass, Cover Groups are evaluated top-to-bottom. Inside each group, condition rows are evaluated top-to-bottom and the **first match wins** for that group's covers. Place specific conditional rows above catch-all rows.
 
 ### Rich condition syntax
-Each rule optionally specifies conditions (space-separated tokens):
+Each rule optionally specifies conditions (space-separated tokens). Both short and long names are accepted (`az` and `azimuth` are equivalent).
+
+**Range conditions** — true continuously while the value is within the range:
 
 | Token | Meaning |
 |---|---|
@@ -30,10 +32,48 @@ Each rule optionally specifies conditions (space-separated tokens):
 | `el>5` / `el>=5` / `el<30` / `el<=30` / `el==10` | Sun elevation (°, negative = below horizon) |
 | `t>8:00` / `t>=8:00` / `t<22:00` / `t<=22:00` / `t==8:30` | Time of day (HH:MM) |
 | `mo>=4` / `mo<=9` | Month (1–12) |
-| `home` / `away` | Presence (requires a presence entity at setup) |
-| `work` / `nowork` | Workday / day off — defaults to Mon–Fri / Sat–Sun, overridable by a binary sensor at setup (compatible with the HA Workday integration) |
+| `d<=4` / `d==0` | Day of week (0=Mon … 6=Sun) |
+| `name>value` | Custom sensor variable (see below) |
+
+**Crossing conditions** — true only in the single evaluation cycle when a threshold is crossed:
+
+| Token | Meaning |
+|---|---|
+| `az=185` / `el=10` / `t=7:30` | Numeric threshold crossed in either direction |
+| `az=^185` / `el=^10` | Threshold crossed while **rising** (e.g. `el=^10` = sunrise above 10°) |
+| `az=v185` / `el=v10` | Threshold crossed while **falling** (e.g. `el=v10` = sunset below 10°) |
+
+Crossing conditions never fire on the first evaluation after HA restarts. If a value skips over a threshold between evaluations, the crossing is still detected. Time (`t`) is monotonic — `=v` never applies to it.
 
 Multiple tokens are ANDed. An empty condition field is a catch-all that always matches.
+
+### Custom sensor variables
+Bind short names to HA entities or Jinja2 templates via **☰ → Custom Variables** in the panel:
+
+```
+alarm=sensor.next_alarm_time
+temp=sensor.living_room_temperature
+motion={{states('binary_sensor.bedroom_motion') == 'on' and 1 or 0}}
+```
+
+The name then works as a condition token in any rule:
+
+```
+alarm<800 el<10    → close before alarm if sun is low
+temp>26            → open vent cover when room is warm
+```
+
+**State coercion** — entity states are coerced to a number in this order:
+
+| State format | Example | Coerced to |
+|---|---|---|
+| ISO datetime with timezone | `2026-05-11T04:40:00+00:00` | HHMM int in HA local time (`440`) |
+| Time string `HH:MM` or `HH:MM:SS` | `07:30:00` | HHMM int (`730`) |
+| Numeric string | `21.5` | float (`21.5`) |
+| `on` / `off` | `on` | `1` / `0` |
+| Anything else | `unavailable`, `unknown`, … | unavailable |
+
+If coercion fails or the entity does not exist, any condition referencing that variable evaluates to `False` (fail-safe). The Variables dialog shows the current resolved value of every variable (built-ins and custom) from the last evaluation cycle.
 
 ### Per-mode options
 Each mode (except ↑ Priority and ↓ Default) has two toggles in the panel:
@@ -96,7 +136,7 @@ Rules are stored in HA's config entry options (`.storage/core.config_entries`). 
 
 1. Go to **Settings → Devices & Services → Add Integration** and search for **Smart Shade Scheduler**.
 2. Select the **mode entity** (`input_select`) whose state names the current mode.
-3. Optionally select a presence entity, a DND binary sensor, and/or an override duration entity.
+3. Optionally select a DND binary sensor and/or an override duration entity.
 4. Open the **Shades** panel in the sidebar to add and manage rules.
 5. Use **Settings → Devices & Services → Smart Shade Scheduler → Configure** to adjust global settings (tolerance, DND times, daily wipe time, override duration).
 
@@ -149,10 +189,7 @@ An automation sets this entity based on weather forecast, time of day, or manual
 ### Planned
 - **Temporary-position service** — set a cover position/tilt that holds only until the next rule evaluation, without triggering the manual-override timer. Useful for one-off adjustments that should self-correct.
 - **One-shot rule flag** — mark a rule as "fire once per day". After it fires for a cover, the cover is left alone until the daily reset, even if conditions remain true. Useful for morning-open rules that should not re-enforce after a manual adjustment.
-- **Crossing conditions (`t=`, `az=`)** — trigger a rule exactly when a threshold is crossed (e.g. `t=7:30` fires once at 07:30, `az=185` fires when the sun crosses 185°), rather than continuously re-evaluating a range. Pairs naturally with the one-shot flag.
-- ~~**Weekday / workday condition**~~ — done. `work`/`nowork` tokens, Mon–Fri default, optional binary sensor override (e.g. HA Workday integration for public holidays).
 
 ### Backlog
 - **Simulator** — a panel view that lets you scrub through a day (time, sun azimuth/elevation, month) and see in real time which rules would fire and what position/tilt each cover would end up at. Useful for validating rules before deploying them.
-- **Cover groups** — use a group entity or named list as a single cover target, so one rule can manage many covers without listing each one.
 - **Jinja2 templates for position/tilt** — accept a template string (e.g. `{{ 50 if az > 200 else 100 }}`), enabling continuous adjustment instead of discrete breakpoints.

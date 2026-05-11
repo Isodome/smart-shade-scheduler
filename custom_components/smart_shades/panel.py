@@ -12,6 +12,8 @@ from homeassistant.components.frontend import (
 from homeassistant.core import HomeAssistant, callback
 
 from .const import (
+    BUILT_IN_VARS,
+    CONF_CUSTOM_VARS,
     CONF_MODE_CONFIG,
     CONF_MODE_ENTITY,
     CONF_RULES,
@@ -25,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 _PANEL_URL = "smart-shades"
 _STATIC_URL = "/smart_shades_static"
 _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
-_JS_VERSION = "38"  # bump to bust the browser cache
+_JS_VERSION = "50"  # bump to bust the browser cache
 
 
 async def async_setup(hass: HomeAssistant) -> None:
@@ -125,6 +127,12 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
         "orphaned_modes": orphaned,
         "special_modes": list(SPECIAL_MODES),
         "overrides": overrides,
+        "custom_vars": entry.options.get(CONF_CUSTOM_VARS, ""),
+        "built_in_vars": [
+            {"short": v["short"], "long": v["long"], "type": v["type"], "entity": v["ha_entity"]}
+            for v in BUILT_IN_VARS
+        ],
+        "var_values": manager._var_values if manager else {},
     })
 
 
@@ -137,6 +145,7 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
     vol.Required("entry_id"): str,
     vol.Required("rules"): list,
     vol.Optional("mode_config"): dict,
+    vol.Optional("custom_vars"): str,
 })
 @callback
 def ws_save_rules(hass: HomeAssistant, connection, msg) -> None:
@@ -150,5 +159,7 @@ def ws_save_rules(hass: HomeAssistant, connection, msg) -> None:
     new_options = {**entry.options, CONF_RULES: msg["rules"]}
     if "mode_config" in msg:
         new_options[CONF_MODE_CONFIG] = msg["mode_config"]
+    if "custom_vars" in msg:
+        new_options[CONF_CUSTOM_VARS] = msg["custom_vars"]
     hass.config_entries.async_update_entry(entry, options=new_options)
     connection.send_result(msg["id"], {"success": True})

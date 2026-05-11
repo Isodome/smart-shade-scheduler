@@ -1,14 +1,22 @@
 """Tests for fill_targets(), evaluate_rules() — priority order and first-match logic."""
 from custom_components.smart_shades.logic import evaluate_rules
 
-CTX = dict(azimuth=200.0, elevation=10.0, hour=14, minute=0)
+CTX = dict(azimuth=200.0, elevation=10.0, hour=14, minute=0, month=1)
 
 
-def ev(groups, mode="NORMAL", block_fallback=False, presence=None, workday=None, **ctx_overrides):
-    c = {**CTX, **ctx_overrides}
-    time_hhmm = c["hour"] * 100 + c["minute"]
-    return evaluate_rules(groups, mode, c["azimuth"], c["elevation"], time_hhmm,
-                          block_fallback=block_fallback, presence=presence, workday=workday)
+def _vals(**ctx):
+    return {
+        "az": ctx["azimuth"],
+        "el": ctx["elevation"],
+        "t":  ctx["hour"] * 100 + ctx["minute"],
+        "mo": ctx.get("month", 1),
+    }
+
+
+def ev(groups, mode="NORMAL", block_fallback=False, prev_vals=None, **ctx_overrides):
+    ctx = {**CTX, **ctx_overrides}
+    vals = _vals(**ctx)
+    return evaluate_rules(groups, mode, vals, prev_vals, block_fallback)
 
 # backward-compat alias used by existing tests
 eval = ev
@@ -55,7 +63,7 @@ def test_conditional_rule_skipped_when_unmet():
             "mode": "NORMAL",
             "covers": ["cover.a"],
             "rules": [
-                {"conditions": [{"var": "azimuth", "op": ">", "val": 250}], "action": {"position": 0}},
+                {"conditions": [{"var": "az", "op": ">", "val": 250}], "action": {"position": 0}},
                 {"action": {"position": 100}},  # catch-all fallback
             ]
         }
@@ -211,25 +219,25 @@ def test_cooling_southwest_scenario():
         {
             "mode": "_priority",
             "covers": ["cover.awning"],
-            "rules": [{"conditions": [{"var": "elevation", "op": "<", "val": 0}], "action": {"position": 100}}]
+            "rules": [{"conditions": [{"var": "el", "op": "<", "val": 0}], "action": {"position": 100}}]
         },
         # COOLING: west sun → balkon awnings at 60%
         {
             "mode": "COOLING",
             "covers": ["cover.awning"],
-            "rules": [{"conditions": [{"var": "azimuth", "op": ">", "val": 200}, {"var": "elevation", "op": ">", "val": 5}], "action": {"position": 60}}]
+            "rules": [{"conditions": [{"var": "az", "op": ">", "val": 200}, {"var": "el", "op": ">", "val": 5}], "action": {"position": 60}}]
         },
         # COOLING: south sun → main blind closed
         {
             "mode": "COOLING",
             "covers": ["cover.blind_living"],
-            "rules": [{"conditions": [{"var": "azimuth", "op": ">", "val": 185}, {"var": "elevation", "op": ">", "val": 5}], "action": {"position": 0, "tilt": 0}}]
+            "rules": [{"conditions": [{"var": "az", "op": ">", "val": 185}, {"var": "el", "op": ">", "val": 5}], "action": {"position": 0, "tilt": 0}}]
         },
         # fallback: open at night
         {
             "mode": "_fallback",
             "covers": ["cover.awning"],
-            "rules": [{"conditions": [{"var": "elevation", "op": "<", "val": 0}], "action": {"position": 100}}]
+            "rules": [{"conditions": [{"var": "el", "op": "<", "val": 0}], "action": {"position": 100}}]
         }
     ]
 
@@ -277,7 +285,7 @@ def test_block_fallback_does_not_suppress_priority():
 
 def test_first_matching_rule_in_group_wins():
     groups = [{"mode": "NORMAL", "covers": ["cover.a"], "rules": [
-        {"conditions": [{"var": "azimuth", "op": ">", "val": 250}], "action": {"position": 0}},
+        {"conditions": [{"var": "az", "op": ">", "val": 250}], "action": {"position": 0}},
         {"conditions": [],                                            "action": {"position": 100}},
     ]}]
     # az=200 → first rule fails, catch-all fires
@@ -307,21 +315,3 @@ def test_cover_claimed_by_first_group_cannot_be_overwritten():
     assert r["cover.a"]["p"] == 0   # first group wins, second cannot overwrite
 
 
-# ── Presence and workday in evaluation ────────────────────────────────────────
-
-def test_presence_home_gates_rule():
-    groups = [{"mode": "NORMAL", "covers": ["cover.a"], "rules": [
-        {"conditions": [{"var": "presence", "op": "==", "val": "home"}], "action": {"position": 50}},
-        {"conditions": [],                                                 "action": {"position": 100}},
-    ]}]
-    assert ev(groups, presence=True) ["cover.a"]["p"] == 50    # home → first rule
-    assert ev(groups, presence=False)["cover.a"]["p"] == 100   # away → falls through to catch-all
-    assert ev(groups, presence=None) ["cover.a"]["p"] == 100   # unknown → fails, catch-all
-
-def test_workday_gates_rule():
-    groups = [{"mode": "NORMAL", "covers": ["cover.a"], "rules": [
-        {"conditions": [{"var": "workday", "op": "==", "val": "work"}],   "action": {"position": 0}},
-        {"conditions": [{"var": "workday", "op": "==", "val": "nowork"}], "action": {"position": 100}},
-    ]}]
-    assert ev(groups, workday=True) ["cover.a"]["p"] == 0      # workday
-    assert ev(groups, workday=False)["cover.a"]["p"] == 100    # day off

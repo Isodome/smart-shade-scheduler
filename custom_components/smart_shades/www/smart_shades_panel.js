@@ -2,15 +2,108 @@
  * Smart Shade Scheduler — sidebar panel
  *
  * Condition tokens (space-separated, case-insensitive):
+ *
+ * Range (continuous):
  *   az>150  az>=150  az<200  az<=200  az==180   azimuth
  *   el>5    el>=5    el<30   el<=30   el==10    elevation
  *   t>8:30  t>=8:30  t<22:00 t<=22:00 t==8:00   time (HH:MM)
  *   mo>=6   mo<=8    mo==12                     month (1-12)
- *   home    away                                presence (requires presence entity)
+ *   name>val                                    custom sensor variable
  *   (empty) catch-all — always matches
+ *
+ * Crossing (fires once when threshold is crossed between evaluations):
+ *   az=185  el=10   t=7:30   either direction
+ *   az=^185 el=^10           rising only  (e.g. el=^10 = sunrise above 10°)
+ *   az=v185 el=v10           falling only (e.g. el=v10 = sunset below 10°)
  */
 
-import { parseCondition, validateCondition, formatCondition } from './conditions.js';
+// ── Condition logic (inlined from conditions.js to avoid async-import timing issues) ──
+
+const _DISPLAY = {
+  az: { hintExamples: ['az&gt;150', 'az&gt;=150', 'az==180'], llm: '"az" / "azimuth" (degrees 0–360)' },
+  el: { hintExamples: ['el&gt;5', 'el&lt;30'],                llm: '"el" / "elevation" (degrees, negative when below horizon)' },
+  t:  { hintExamples: ['t&gt;=8:30', 't&lt;22:00'],          llm: '"t" / "time" (HHMM integer — 08:30 → 830, 19:00 → 1900)' },
+  mo: { hintExamples: ['mo&gt;=6', 'mo&lt;=8'],               llm: '"mo" / "month" (1–12)' },
+  d:  { hintExamples: ['d&lt;=4', 'd==0'],                   llm: '"d" / "day" (weekday: 0=Mon … 6=Sun)' },
+};
+
+let CONDITION_SPEC = [];
+let _LONG_TO_SHORT = {};
+let _TIME_VARS     = new Set();
+
+function initConditionSpec(builtInVars) {
+  CONDITION_SPEC = builtInVars.map(v => ({ ...v, ...(_DISPLAY[v.short] ?? {}) }));
+  _LONG_TO_SHORT = Object.fromEntries(CONDITION_SPEC.map(s => [s.long, s.short]));
+  _TIME_VARS     = new Set(CONDITION_SPEC.filter(s => s.type === 'time').map(s => s.short));
+}
+
+initConditionSpec([
+  { short: 'az', long: 'azimuth',   type: 'number' },
+  { short: 'el', long: 'elevation', type: 'number' },
+  { short: 't',  long: 'time',      type: 'time'   },
+  { short: 'mo', long: 'month',     type: 'number' },
+  { short: 'd',  long: 'day',       type: 'number' },
+]);
+
+function conditionHintHtml() {
+  const rangeItems = CONDITION_SPEC
+    .filter(s => s.hintExamples)
+    .map(s => s.hintExamples.map(e => `<code>${e}</code>`).join(' ') + ' ' + s.long)
+    .join(' &nbsp;\n          ');
+  return `Conditions (space-separated, empty = catch-all):<br>
+          ${rangeItems}<br>
+          Crossing (fires once): <code>=</code> either &nbsp; <code>=^</code> rising &nbsp; <code>=v</code> falling<br>`;
+}
+
+function conditionLlmText() {
+  const varList = CONDITION_SPEC.filter(s => s.llm).map(s => s.llm).join(', ');
+  return `Condition variables: ${varList}.
+Custom variables can be defined in the Variables panel (☰ → Custom Variables): bind a short name to any HA entity or Jinja2 template and use it as a condition token.
+
+Range operators: ">", ">=", "<", "<=", "==". True continuously while the value satisfies the comparison.
+
+Crossing operators (true only in the single evaluation cycle when the threshold is crossed between samples):
+- "=" — threshold crossed in either direction
+- "=^" — threshold crossed while rising (e.g. {"var":"el","op":"=^","val":10} = sunrise above 10°)
+- "=v" — threshold crossed while falling; not applicable to time variables
+Crossing conditions never fire on the first evaluation after HA restarts. If a value skips over a threshold between evaluations, the crossing is still detected.
+
+All conditions in a rule are ANDed.`;
+}
+
+const _TOKEN_RE = /([a-z][a-z0-9_]*)\s*(>=|<=|==|=\^|=v|>|<|=)\s*(-?\d+(?::\d+)?(?:\.\d+)?)/gi;
+
+function _normalizeVar(raw) {
+  const lower = raw.toLowerCase();
+  return _LONG_TO_SHORT[lower] ?? lower;
+}
+
+function parseCondition(str) {
+  const conditions = [];
+  for (const [, rawVar, rawOp, val] of str.matchAll(_TOKEN_RE)) {
+    conditions.push({ var: _normalizeVar(rawVar), op: rawOp, val: parseFloat(val.replace(':', '')) });
+  }
+  return conditions;
+}
+
+function validateCondition(str) {
+  if (!str.trim()) return { ok: true, bad: [] };
+  const remaining = str.replace(_TOKEN_RE, '').replace(/\s+/g, '');
+  return remaining ? { ok: false, bad: [remaining] } : { ok: true, bad: [] };
+}
+
+function formatCondition(conditions) {
+  if (!conditions || !Array.isArray(conditions)) return '';
+  return conditions.map(cond => {
+    const short = _normalizeVar(cond.var);
+    let v = cond.val;
+    if (_TIME_VARS.has(short)) {
+      const strV = String(v).padStart(3, '0');
+      v = strV.slice(0, -2) + ':' + strV.slice(-2);
+    }
+    return `${short}${cond.op}${v}`;
+  }).join(' ');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -457,7 +550,9 @@ class SmartShadesPanel extends HTMLElement {
     this._saving        = false;
     this._error         = null;
     this._pendingDelete = null; // { group, gIdx, timer }
-    this._modeConfig    = {};   // mode → { block_fallback, force }
+    this._modeConfig      = {};   // mode → { block_fallback, force }
+    this._customVars = "";   // raw text bindings
+    this._varValues  = {};   // all var values (built-ins + custom) from last eval
   }
 
   set hass(hass) {
@@ -472,6 +567,9 @@ class SmartShadesPanel extends HTMLElement {
       this._groups     = JSON.parse(JSON.stringify(cfg.rules || []));
       this._modeConfig = JSON.parse(JSON.stringify(cfg.mode_config || {}));
       this._modes      = cfg.mode_options || [];
+      this._customVars = cfg.custom_vars || "";
+      this._varValues  = cfg.var_values  || {};
+      initConditionSpec(cfg.built_in_vars || []);
       this._orphaned = new Set(cfg.orphaned_modes || []);
       this._special  = new Set(cfg.special_modes  || []);
       this._mode     = this._modes.includes(cfg.current_mode)
@@ -620,6 +718,7 @@ class SmartShadesPanel extends HTMLElement {
         entry_id: this._cfg.entry_id,
         rules: outGroups,
         mode_config: this._modeConfig,
+        custom_vars: this._customVars,
       });
       this._dirty  = false;
       this._error  = null;
@@ -832,6 +931,7 @@ class SmartShadesPanel extends HTMLElement {
           <div class="hamburger-wrap">
             <button class="hamburger-btn" id="hamburger-btn" title="More options">☰</button>
             <div class="hamburger-menu" id="hamburger-menu">
+              <button id="vars-btn">Custom Variables</button>
               <button id="llm-btn">Generate LLM Prompt</button>
               <button id="export-btn">Export</button>
               <button id="import-btn">Import</button>
@@ -846,18 +946,27 @@ class SmartShadesPanel extends HTMLElement {
 
       <div class="footer">
         <span class="hint">
-          Conditions (space-separated, empty = catch-all):<br>
-          <code>az&gt;150</code> <code>az&gt;=150</code> <code>az==180</code> azimuth &nbsp;
-          <code>el&gt;5</code> <code>el&lt;30</code> elevation &nbsp;
-          <code>t&gt;=8:30</code> <code>t&lt;22:00</code> <code>t==8:00</code> time &nbsp;
-          <code>mo&gt;=6</code> <code>mo&lt;=8</code> month (1–12) &nbsp;
-          <code>home</code> <code>away</code> presence &nbsp;
-          <code>work</code> <code>nowork</code> work day<br>
+          ${conditionHintHtml()}
           First matching rule wins per cover. ⚠ = manual override active.<br>
           <strong>↑ Priority</strong> rules are evaluated before all mode rules and override everything. &nbsp;
           <strong>↓ Default</strong> rules are evaluated only when no rule in the current mode matched a cover.
         </span>
       </div>
+
+      <dialog id="vars-dialog">
+        <h3 class="dialog-title">Custom Variables</h3>
+        <div style="margin-bottom:8px; font-size:13px; opacity:0.8;">
+          One binding per line: <code>name=sensor.entity_id</code> or <code>name={{jinja2}}</code><br>
+          Use the name as a condition token, e.g. <code>alarm&lt;800</code>. Lines starting with # are ignored.
+        </div>
+        <textarea id="vars-textarea" class="dialog-textarea" rows="8"
+          placeholder="alarm=sensor.next_alarm_time&#10;temp=sensor.living_room_temperature&#10;motion={{states('binary_sensor.motion') == 'on' and 1 or 0}}"></textarea>
+        <div id="vars-resolved" style="margin:8px 0; font-size:12px; font-family:monospace; opacity:0.8; white-space:pre;"></div>
+        <div class="dialog-actions">
+          <button class="secondary-btn" id="vars-cancel">Cancel</button>
+          <button class="save-btn" id="vars-save">Save & Apply</button>
+        </div>
+      </dialog>
 
       <dialog id="import-dialog">
         <h3 class="dialog-title">Import Rules</h3>
@@ -978,7 +1087,18 @@ class SmartShadesPanel extends HTMLElement {
         inp.value = '';
       };
       inp.addEventListener('change', commit);
-      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+      inp.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const typed = inp.value.trim();
+        if (typed) {
+          const datalist = document.getElementById('covers-list');
+          const match = datalist && Array.from(datalist.options)
+            .find(o => o.value.toLowerCase().startsWith(typed.toLowerCase()));
+          if (match) inp.value = match.value;
+        }
+        commit();
+      });
     });
 
     root.querySelectorAll('.f-cond').forEach(inp => {
@@ -1050,6 +1170,27 @@ class SmartShadesPanel extends HTMLElement {
         d.showModal();
       }
     };
+
+    root.querySelector('#vars-btn')?.addEventListener('click', () => {
+      const d = root.querySelector('#vars-dialog');
+      root.querySelector('#vars-textarea').value = this._customVars;
+      const entries = Object.entries(this._varValues);
+      root.querySelector('#vars-resolved').textContent = entries.length
+        ? 'Current values (last evaluation):\n' + entries.map(([k, v]) => `  ${k} = ${v ?? 'unavailable'}`).join('\n')
+        : '(no values yet — wait for first evaluation cycle)';
+      d.showModal();
+    });
+
+    root.querySelector('#vars-cancel')?.addEventListener('click', () => {
+      root.querySelector('#vars-dialog').close();
+    });
+
+    root.querySelector('#vars-save')?.addEventListener('click', async () => {
+      this._customVars = root.querySelector('#vars-textarea').value;
+      root.querySelector('#vars-dialog').close();
+      this._dirty = true;
+      this._render();
+    });
 
     root.querySelector('#export-btn')?.addEventListener('click', () => {
       this._collect();
@@ -1137,7 +1278,7 @@ class SmartShadesPanel extends HTMLElement {
         }).join('\n') || '(none)';
 
       const prompt = `I am building a system to automate my shades in Home Assistant.
-Unlike standard Home Assistant automations which are event-driven and based on momentary triggers, this system operates as a continuous state engine. Declarative rules dictate the absolute position and tilt that covers should have based on current environmental inputs (time, sun azimuth/elevation, month, presence). The system evaluates rules periodically and on sun/mode changes, and moves covers to match the desired state.
+Unlike standard Home Assistant automations which are event-driven and based on momentary triggers, this system operates as a continuous state engine. Declarative rules dictate the absolute position and tilt that covers should have based on current environmental inputs (time, sun azimuth/elevation, month, presence, workday). The system evaluates rules periodically and on sun/mode changes, and moves covers to match the desired state.
 The active set of rules is chosen based on a specific input_select entity (the "Mode").
 
 ### System State
@@ -1176,8 +1317,7 @@ There are two top-level objects stored together:
 ]
 \`\`\`
 
-Condition variables: "azimuth" (degrees 0–360), "elevation" (degrees, negative when below horizon), "time" (HHMM integer — 08:30 → 830, 19:00 → 1900), "month" (1–12), "presence" ("home" or "away", requires a presence entity at setup), "work"/"nowork" (work = Mon–Fri or sensor on, nowork = Sat–Sun or sensor off; optionally overridden by a binary_sensor at setup).
-Operators: ">", ">=", "<", "<=", "==". All conditions in a rule are ANDed.
+${conditionLlmText()}
 An empty conditions array ("conditions": []) is a catch-all — it always matches unconditionally. Place it as the last rule in a group to act as a default/fallback for that group's covers when no earlier rule's conditions were met.
 Action fields: "position" (0–100, omit to leave position unchanged), "tilt" (0–100, omit to leave tilt unchanged). At least one must be present.
 
