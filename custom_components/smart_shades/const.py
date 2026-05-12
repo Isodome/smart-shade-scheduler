@@ -7,7 +7,6 @@ CONF_MODE_ENTITY = "mode_entity"
 CONF_TOLERANCE = "tolerance"
 CONF_DND_START = "dnd_start"
 CONF_DND_END = "dnd_end"
-CONF_WIPE_TIME = "wipe_time"
 CONF_RULES = "rules"
 
 # Rule dict keys
@@ -23,19 +22,29 @@ CONF_OVERRIDE_DURATION_ENTITY = "override_duration_entity"
 CONF_MODE_CONFIG     = "mode_config"     # dict: mode → {block_fallback, force}
 
 # Built-in condition variables.
-# To add a new one: append an entry here — nothing else needs changing.
-#   ha_entity : HA entity_id to read, or None for synthetic vars
-#   ha_attr   : attribute name on the entity, or sentinel for synthetic vars:
-#               "time"  → current HHMM integer
-#               "month" → current month integer
+# To add a new one: append an entry here with a resolver(hass, now) -> float | None.
+from functools import partial
+
+def _entity_attr(entity, attr, hass, now):
+    s = hass.states.get(entity)
+    if s is None: return None
+    try: return float(s.attributes.get(attr, 0))
+    except (ValueError, TypeError): return None
+
+def _now_hhmm(hass, now):  return float(now.hour * 100 + now.minute)
+def _now_month(hass, now):  return float(now.month)
+def _now_weekday(hass, now): return float(now.weekday())
+
 BUILT_IN_VARS = [
-    {"short": "az", "long": "azimuth",   "type": "number", "ha_entity": "sun.sun", "ha_attr": "azimuth"},
-    {"short": "el", "long": "elevation", "type": "number", "ha_entity": "sun.sun", "ha_attr": "elevation"},
-    {"short": "t",  "long": "time",      "type": "time",   "ha_entity": None,      "ha_attr": "time"},
-    {"short": "mo", "long": "month",     "type": "number", "ha_entity": None,      "ha_attr": "month"},
-    {"short": "d",  "long": "day",       "type": "number", "ha_entity": None,      "ha_attr": "weekday"},
+    {"short": "az", "long": "azimuth",   "type": "number", "resolver": partial(_entity_attr, "sun.sun", "azimuth")},
+    {"short": "el", "long": "elevation", "type": "number", "resolver": partial(_entity_attr, "sun.sun", "elevation")},
+    {"short": "t",  "long": "time",      "type": "time",   "resolver": _now_hhmm},
+    {"short": "mo", "long": "month",     "type": "number", "resolver": _now_month},
+    {"short": "d",  "long": "day",       "type": "number", "resolver": _now_weekday},
 ]
 CONF_CUSTOM_VARS     = "custom_vars"     # str: multiline "name=entity_id" or "name={{template}}"
+CONF_TILT_DELAY      = "tilt_delay"     # seconds to wait between position and tilt commands
+DEFAULT_TILT_DELAY   = 30
 
 # Reserved mode keys — always present, never orphaned
 PRIORITY_MODE = "_priority"
@@ -44,7 +53,6 @@ SPECIAL_MODES = {PRIORITY_MODE, FALLBACK_MODE}
 
 # Defaults (time values as HH:MM:SS to match TimeSelector output)
 DEFAULT_TOLERANCE = 5
-DEFAULT_WIPE_TIME = "04:00:00"
 DEFAULT_DND_START = "22:00:00"
 DEFAULT_DND_END = "07:00:00"
 

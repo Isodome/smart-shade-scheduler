@@ -27,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 _PANEL_URL = "smart-shades"
 _STATIC_URL = "/smart_shades_static"
 _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
-_JS_VERSION = "50"  # bump to bust the browser cache
+_JS_VERSION = "52"  # bump to bust the browser cache
 
 
 async def async_setup(hass: HomeAssistant) -> None:
@@ -129,7 +129,7 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
         "overrides": overrides,
         "custom_vars": entry.options.get(CONF_CUSTOM_VARS, ""),
         "built_in_vars": [
-            {"short": v["short"], "long": v["long"], "type": v["type"], "entity": v["ha_entity"]}
+            {"short": v["short"], "long": v["long"], "type": v["type"]}
             for v in BUILT_IN_VARS
         ],
         "var_values": manager._var_values if manager else {},

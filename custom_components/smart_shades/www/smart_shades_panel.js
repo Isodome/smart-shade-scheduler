@@ -819,8 +819,8 @@ class SmartShadesPanel extends HTMLElement {
               </td>
               <td>
                 <div class="cond-wrap">
-                  <input class="f-cond" value="${condStr}" placeholder="az>150 el<30" />
-                  <span class="cond-badge ${validateCondition(condStr).ok ? 'ok' : 'error'}">${condStr ? (validateCondition(condStr).ok ? '✓' : '✗') : ''}</span>
+                  <input class="f-cond" value="${condStr}" placeholder="-" />
+                  <span class="cond-badge ${validateCondition(condStr).ok ? '' : 'error'}">${condStr && !validateCondition(condStr).ok ? '✗' : ''}</span>
                 </div>
               </td>
               <td><input class="f-pos narrow" type="number" min="0" max="100"
@@ -1105,13 +1105,14 @@ class SmartShadesPanel extends HTMLElement {
       const badge = inp.nextElementSibling;
       const update = () => {
         const v = validateCondition(inp.value);
-        if (!inp.value.trim()) {
+        if (!inp.value.trim() || v.ok) {
           badge.textContent = '';
           badge.className = 'cond-badge';
+          badge.title = '';
         } else {
-          badge.textContent = v.ok ? '✓' : '✗';
-          badge.className   = `cond-badge ${v.ok ? 'ok' : 'error'}`;
-          badge.title       = v.ok ? '' : `Unknown token(s): ${v.bad.join(', ')}`;
+          badge.textContent = '✗';
+          badge.className   = 'cond-badge error';
+          badge.title       = `Unknown token(s): ${v.bad.join(', ')}`;
         }
         markDirty();
       };
@@ -1277,6 +1278,10 @@ class SmartShadesPanel extends HTMLElement {
           return `- ${m}: ${flags.join(', ')}`;
         }).join('\n') || '(none)';
 
+      const liveValuesSection = Object.entries(this._varValues)
+        .map(([k, v]) => `  ${k}: ${v == null ? 'unavailable' : v}`)
+        .join('\n') || '  (no values yet)';
+
       const prompt = `I am building a system to automate my shades in Home Assistant.
 Unlike standard Home Assistant automations which are event-driven and based on momentary triggers, this system operates as a continuous state engine. Declarative rules dictate the absolute position and tilt that covers should have based on current environmental inputs (time, sun azimuth/elevation, month, presence, workday). The system evaluates rules periodically and on sun/mode changes, and moves covers to match the desired state.
 The active set of rules is chosen based on a specific input_select entity (the "Mode").
@@ -1286,6 +1291,8 @@ Available Modes: ${this._modes.join(', ')}
 
 Available Covers:
 ${coversPrompt}
+### Current Live Values
+${liveValuesSection}
 
 ### Data Structure
 There are two top-level objects stored together:

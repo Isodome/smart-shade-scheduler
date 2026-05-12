@@ -9,7 +9,6 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
-    async_track_time_change,
     async_track_time_interval,
 )
 
@@ -25,38 +24,19 @@ from .const import (
     CONF_OVERRIDE_DURATION,
     CONF_OVERRIDE_DURATION_ENTITY,
     CONF_RULES,
+    CONF_TILT_DELAY,
     CONF_TOLERANCE,
-    CONF_WIPE_TIME,
     DEFAULT_DND_END,
     DEFAULT_DND_START,
     DEFAULT_OVERRIDE_DURATION,
+    DEFAULT_TILT_DELAY,
     DEFAULT_TOLERANCE,
-    DEFAULT_WIPE_TIME,
     DOMAIN,
     FALLBACK_MODE,
     PRIORITY_MODE,
     SCAN_INTERVAL_MINUTES,
 )
 
-
-def _resolve_builtin(var_spec: dict, hass, now: datetime) -> float | None:
-    """Resolve a single BUILT_IN_VAR entry to its current float value."""
-    entity = var_spec.get("ha_entity")
-    attr   = var_spec.get("ha_attr")
-    if entity is None:
-        if attr == "time":    return float(now.hour * 100 + now.minute)
-        if attr == "month":   return float(now.month)
-        if attr == "weekday": return float(now.weekday())  # 0=Mon … 6=Sun
-        return None
-    state = hass.states.get(entity)
-    if state is None:
-        return None
-    if attr:
-        try:
-            return float(state.attributes.get(attr, 0))
-        except (ValueError, TypeError):
-            return None
-    return _coerce_state(state.state)
 
 
 def _coerce_state(state_str: str) -> float | None:
@@ -96,7 +76,6 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = manager
     await manager.async_init()
 
-    # Re-init wipe tracker whenever options change (e.g. wipe_time updated)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
@@ -151,7 +130,6 @@ async def _async_options_updated(hass: HomeAssistant, entry) -> None:
     """Re-init listeners and immediately apply the new rules."""
     manager: ShadeManager | None = hass.data[DOMAIN].get(entry.entry_id)
     if manager:
-        manager.reinit_wipe_tracker()
         manager.reinit_mode_listener()
         await manager.async_evaluate_rules()
 
@@ -178,7 +156,6 @@ class ShadeManager:
         self._var_values: dict[str, float | None] = {}   # built-ins + custom, last eval
 
         self._unsub: list = []
-        self._wipe_unsub = None
         self._mode_unsub = None
         self._eval_lock = asyncio.Lock()
         self._listeners: list = []
@@ -207,23 +184,7 @@ class ShadeManager:
             )
         )
 
-        self.reinit_wipe_tracker()
         self.reinit_mode_listener()
-
-    def reinit_wipe_tracker(self) -> None:
-        """(Re-)register the daily override wipe. Safe to call repeatedly."""
-        if self._wipe_unsub:
-            self._wipe_unsub()
-            self._wipe_unsub = None
-
-        wipe_str = self._opt(CONF_WIPE_TIME, DEFAULT_WIPE_TIME)
-        try:
-            h, m = map(int, wipe_str.split(":")[:2])
-            self._wipe_unsub = async_track_time_change(
-                self.hass, self._on_daily_wipe, hour=h, minute=m, second=0
-            )
-        except (ValueError, AttributeError):
-            _LOGGER.error("Invalid wipe_time value: %s", wipe_str)
 
     def reinit_mode_listener(self) -> None:
         """(Re-)register the mode entity state change listener."""
@@ -242,9 +203,6 @@ class ShadeManager:
         for unsub in self._unsub:
             unsub()
         self._unsub.clear()
-        if self._wipe_unsub:
-            self._wipe_unsub()
-            self._wipe_unsub = None
         if self._mode_unsub:
             self._mode_unsub()
             self._mode_unsub = None
@@ -326,13 +284,6 @@ class ShadeManager:
     def _on_interval(self, _now) -> None:
         self.hass.async_create_task(self.async_evaluate_rules())
 
-    @callback
-    def _on_daily_wipe(self, _now) -> None:
-        _LOGGER.info("Daily wipe: clearing all overrides and command history")
-        self._overrides.clear()
-        self._last_commanded.clear()
-        self._notify()
-
     # ------------------------------------------------------------------
     # Core logic
     # ------------------------------------------------------------------
@@ -371,34 +322,38 @@ class ShadeManager:
     def _tolerance(self) -> int:
         return int(self._opt(CONF_TOLERANCE, DEFAULT_TOLERANCE))
 
-    async def _resolve_custom_vars(self) -> dict[str, float | None]:
-        """Parse the custom_vars option and resolve each binding to float | None."""
+    def _tilt_delay(self) -> int:
+        return int(self._opt(CONF_TILT_DELAY, DEFAULT_TILT_DELAY))
+
+    def _build_custom_resolvers(self) -> dict[str, object]:
+        """Parse custom_vars option and return {name: resolver(hass, now)} for each binding."""
         from homeassistant.helpers.template import Template
-        text = self.entry.options.get(CONF_CUSTOM_VARS, "")
-        result: dict[str, float | None] = {}
-        for line in text.splitlines():
+
+        def _make(source):
+            if source.startswith("{{") and source.endswith("}}"):
+                def resolver(hass, now):
+                    try:
+                        return _coerce_state(str(Template(source, hass).async_render()))
+                    except Exception:
+                        return None
+            else:
+                def resolver(hass, now):
+                    state = hass.states.get(source)
+                    if state is None or state.state in ("unavailable", "unknown"):
+                        return None
+                    return _coerce_state(state.state)
+            return resolver
+
+        result = {}
+        for line in self.entry.options.get(CONF_CUSTOM_VARS, "").splitlines():
             line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
+            if not line or line.startswith("#") or "=" not in line:
                 continue
             name, _, source = line.partition("=")
             name = name.strip().lower()
             source = source.strip()
-            if not name:
-                continue
-            if source.startswith("{{") and source.endswith("}}"):
-                try:
-                    rendered = Template(source, self.hass).async_render()
-                    result[name] = _coerce_state(str(rendered))
-                except Exception:
-                    result[name] = None
-            else:
-                state = self.hass.states.get(source)
-                if state is None or state.state in ("unavailable", "unknown"):
-                    result[name] = None
-                else:
-                    result[name] = _coerce_state(state.state)
+            if name:
+                result[name] = _make(source)
         return result
 
     async def async_evaluate_rules(self) -> None:
@@ -426,19 +381,18 @@ class ShadeManager:
         mode_cfg = self.entry.options.get(CONF_MODE_CONFIG, {})
         block_fallback = mode_cfg.get(current_mode, {}).get("block_fallback", False)
 
-        # Resolve all built-in variables from BUILT_IN_VARS spec
-        cur_vals: dict = {v["short"]: _resolve_builtin(v, self.hass, now) for v in BUILT_IN_VARS}
-
-        # Resolve custom variables and merge (built-ins take precedence)
-        custom_vars = await self._resolve_custom_vars()
-        for name, value in custom_vars.items():
+        cur_vals: dict = {v["short"]: v["resolver"](self.hass, now) for v in BUILT_IN_VARS}
+        for name, resolver in self._build_custom_resolvers().items():
             if name not in cur_vals:
-                cur_vals[name] = value
+                cur_vals[name] = resolver(self.hass, now)
 
         self._var_values = dict(cur_vals)
 
         shade_targets = evaluate_rules(groups, current_mode, cur_vals, self._prev_vals, block_fallback)
         self._prev_vals = cur_vals
+
+        pos_cmds: dict[str, int] = {}
+        tilt_cmds: dict[str, int] = {}
 
         for entity_id, target in shade_targets.items():
             state = self.hass.states.get(entity_id)
@@ -479,13 +433,16 @@ class ShadeManager:
             # ── Divergence check: cover moved since our last command? ──────
             last = self._last_commanded.get(entity_id)
             if last is not None:
-                # Skip divergence check while the cover may still be in transit
                 cmd_age = (now - last["ts"]).total_seconds()
                 if cmd_age < self._TRANSIT_GRACE:
-                    await self._control_shade(
-                        entity_id, target_pos, target_tilt,
-                        tolerance, cur_pos, cur_tilt,
-                    )
+                    # Still in transit — re-send position only, skip tilt
+                    needs_pos = target_pos is not None and cur_pos is not None and abs(int(cur_pos) - target_pos) > tolerance
+                    if needs_pos:
+                        self._last_commanded[entity_id] = {"p": target_pos, "t": target_tilt, "ts": datetime.now()}
+                        pos_cmds[entity_id] = target_pos
+                    else:
+                        self._last_commanded[entity_id]["p"] = target_pos
+                        self._last_commanded[entity_id]["t"] = target_tilt
                     continue
 
                 last_pos = last.get("p")
@@ -509,52 +466,56 @@ class ShadeManager:
                     self._overrides[entity_id] = now
                     continue
 
-            await self._control_shade(
-                entity_id, target_pos, target_tilt,
-                tolerance, cur_pos, cur_tilt,
-            )
+            needs_pos = target_pos is not None and cur_pos is not None and abs(int(cur_pos) - target_pos) > tolerance
+            needs_tilt = target_tilt is not None and cur_tilt is not None and abs(int(cur_tilt) - target_tilt) > tolerance
+            needs_move = needs_pos or needs_tilt
+            if entity_id not in self._last_commanded or needs_move:
+                self._last_commanded[entity_id] = {"p": target_pos, "t": target_tilt, "ts": datetime.now()}
+            else:
+                self._last_commanded[entity_id]["p"] = target_pos
+                self._last_commanded[entity_id]["t"] = target_tilt
+            if needs_pos:
+                pos_cmds[entity_id] = target_pos
+            if needs_tilt:
+                tilt_cmds[entity_id] = target_tilt
+
+        # Send all position commands immediately
+        for entity_id, pos in pos_cmds.items():
+            await self._send_pos(entity_id, pos)
+
+        # Send tilt commands: delayed via background task if positions were also
+        # sent (device needs to finish moving first), otherwise immediately.
+        if tilt_cmds:
+            if pos_cmds:
+                delay = self._tilt_delay()
+                async def _delayed_tilts(cmds: dict = dict(tilt_cmds)) -> None:
+                    await asyncio.sleep(delay)
+                    for eid, tilt in cmds.items():
+                        await self._send_tilt(eid, tilt)
+                self.hass.async_create_task(_delayed_tilts())
+            else:
+                for entity_id, tilt in tilt_cmds.items():
+                    await self._send_tilt(entity_id, tilt)
 
         self._notify()
 
-    async def _control_shade(
-        self,
-        entity_id: str,
-        pos: int | None,
-        tilt: int | None,
-        tolerance: int,
-        cur_pos,
-        cur_tilt,
-    ) -> None:
-        needs_move = False
-        if pos is not None and cur_pos is not None:
-            needs_move = abs(int(cur_pos) - pos) > tolerance
-        if not needs_move and tilt is not None and cur_tilt is not None:
-            needs_move = abs(int(cur_tilt) - tilt) > tolerance
-
-        # Always record the scheduled target so the divergence check can detect
-        # manual moves even when the cover was already at the right position
-        # and no service call was needed.
-        self._last_commanded[entity_id] = {"p": pos, "t": tilt, "ts": datetime.now()}
-
-        if not needs_move:
-            return
-
-        if pos is not None:
-            if pos == 100:
-                await self.hass.services.async_call(
-                    "cover", "open_cover", {"entity_id": entity_id}
-                )
-            elif pos == 0:
-                await self.hass.services.async_call(
-                    "cover", "close_cover", {"entity_id": entity_id}
-                )
-            else:
-                await self.hass.services.async_call(
-                    "cover", "set_cover_position",
-                    {"entity_id": entity_id, "position": pos},
-                )
-        if tilt is not None:
+    async def _send_pos(self, entity_id: str, pos: int) -> None:
+        if pos == 100:
             await self.hass.services.async_call(
-                "cover", "set_cover_tilt_position",
-                {"entity_id": entity_id, "tilt_position": tilt},
+                "cover", "open_cover", {"entity_id": entity_id}
             )
+        elif pos == 0:
+            await self.hass.services.async_call(
+                "cover", "close_cover", {"entity_id": entity_id}
+            )
+        else:
+            await self.hass.services.async_call(
+                "cover", "set_cover_position",
+                {"entity_id": entity_id, "position": pos},
+            )
+
+    async def _send_tilt(self, entity_id: str, tilt: int) -> None:
+        await self.hass.services.async_call(
+            "cover", "set_cover_tilt_position",
+            {"entity_id": entity_id, "tilt_position": tilt},
+        )
