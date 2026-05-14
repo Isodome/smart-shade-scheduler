@@ -213,7 +213,12 @@ const CSS = `
   .mode-section.collapsed .mode-opts,
   .mode-section.collapsed .add-group-btn { display: none; }
   .mode-section.collapsed .section-heading { opacity: .5; font-style: italic; }
-  .mode-section.collapsed .section-heading::after { content: ' — collapsed'; font-weight: 400; font-size: 11px; }
+  .collapsed-summary {
+    display: none; font-size: 12px; color: var(--secondary-text-color);
+    padding: 2px 0 8px; cursor: pointer; font-style: normal;
+  }
+  .collapsed-summary:hover { color: var(--primary-color); }
+  .mode-section.collapsed .collapsed-summary { display: block; }
 
   /* ── Card / table ──────────────────────────────────── */
   .table-card {
@@ -222,7 +227,7 @@ const CSS = `
     box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,.12));
     overflow: hidden;
     margin-bottom: 12px;
-    max-width: 960px;
+    max-width: 1120px;
   }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   thead th {
@@ -236,7 +241,7 @@ const CSS = `
     border-bottom: 1px solid var(--divider-color);
   }
   tbody.cover-group {
-    border-bottom: 3px solid var(--divider-color);
+    border-bottom: 1px solid var(--divider-color);
   }
   tbody.cover-group:last-child {
     border-bottom: none;
@@ -246,19 +251,19 @@ const CSS = `
     background: rgba(0,0,0,.015);
     border-right: 1px solid var(--divider-color);
     padding: 10px;
+    height: 1px; /* makes height:100% on covers-inner resolve to full row height */
   }
-  .covers-cell-inner { display: flex; gap: 6px; align-items: flex-start; }
+  .covers-inner { display: flex; flex-direction: column; height: 100%; gap: 8px; }
   .covers-content { flex: 1; min-width: 0; }
+  .covers-bottom { display: flex; align-items: center; gap: 4px; }
+  .covers-bottom .cover-add { flex: 1; }
   tbody td {
     padding: 3px 8px;
     border-bottom: 1px solid var(--divider-color);
     vertical-align: middle;
   }
   tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: var(--secondary-background-color, rgba(0,0,0,.03)); }
   tr.has-override { background: rgba(255,152,0,.08) !important; }
-  tr.row-invalid  { opacity: .55; }
-  tr.row-invalid .f-pos, tr.row-invalid .f-tilt { border-color: var(--error-color, #b00020); }
 
   /* ── Inputs ────────────────────────────────────────── */
   input {
@@ -280,15 +285,15 @@ const CSS = `
     border-color: var(--primary-color);
     background: var(--primary-background-color);
   }
-  input.narrow { width: 58px; text-align: center; }
+  input.narrow { width: 53px; text-align: center; }
   input.narrow::-webkit-inner-spin-button,
   input.narrow::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   input.narrow[type=number] { -moz-appearance: textfield; appearance: textfield; }
   input::placeholder { color: var(--secondary-text-color); opacity: .6; }
 
   /* ── Row actions ───────────────────────────────────── */
-  .row-btns { display: flex; gap: 2px; align-items: center; justify-content: flex-end; opacity: 0; transition: opacity .15s; }
-  .rule-row:hover .row-btns { opacity: 1; }
+  .row-btns { display: flex; gap: 2px; align-items: center; justify-content: flex-end; opacity: 0; transition: opacity .15s; flex-shrink: 0; width: 108px; }
+  .rule-card:hover .row-btns { opacity: 1; }
   .icon-btn {
     background: none;
     border: none;
@@ -303,13 +308,13 @@ const CSS = `
   .icon-btn:hover { background: var(--secondary-background-color); color: var(--primary-text-color); }
   .up-btn:hover, .dn-btn:hover, .up-group-btn:hover, .dn-group-btn:hover { background: var(--primary-color); color: var(--text-primary-color, #fff); }
   .icon-btn:disabled { opacity: .12; cursor: default; }
-  .up-btn:disabled, .dn-btn:disabled,
+  .up-btn:disabled, .dn-btn:disabled { visibility: hidden; }
   .up-group-btn:disabled, .dn-group-btn:disabled { display: none; }
   .icon-btn.del:hover { background: var(--error-color, #b00020); color: #fff; }
   .override-icon { color: #ff9800; cursor: default; font-size: 14px; margin-left: 4px; }
   /* ── Group action buttons ──────────────────────────── */
   .group-btns {
-    display: flex; flex-direction: column; gap: 2px; flex-shrink: 0;
+    display: flex; flex-direction: row; gap: 2px; justify-content: flex-end;
     opacity: 0; transition: opacity .15s;
   }
   .cover-group:hover .group-btns { opacity: 1; }
@@ -319,7 +324,7 @@ const CSS = `
   /* vertical position bar */
   .pos-bar-track {
     width: 14px; height: 36px; flex-shrink: 0;
-    background: var(--secondary-background-color, rgba(0,0,0,.06)); border-radius: 2px; overflow: hidden;
+    background: var(--divider-color); border-radius: 2px; overflow: hidden;
     display: flex; flex-direction: column; justify-content: flex-start;
   }
   .pos-bar-fill { width: 100%; min-height: 3px; background: linear-gradient(to bottom, rgba(81,110,137,.25), #516E89); transition: height .2s; }
@@ -332,8 +337,8 @@ const CSS = `
   .chips { display: flex; flex-wrap: wrap; gap: 4px; min-height: 4px; }
   .chip {
     display: inline-flex; align-items: center; gap: 3px;
-    background: var(--primary-color); color: var(--text-primary-color, #fff);
-    border-radius: 12px; padding: 2px 6px 2px 8px; font-size: 13px;
+    background: color-mix(in srgb, var(--primary-color) 75%, #000); color: #fff;
+    border-radius: 12px; padding: 2px 6px 2px 8px; font-size: 14px;
     max-width: 100%; min-width: 0;
   }
   .chip-label {
@@ -404,21 +409,27 @@ const CSS = `
     transform: translateX(16px);
   }
 
-  /* ── Add buttons ───────────────────────────────────── */
-  .add-row td { padding: 0; }
-  .add-rule-btn {
-    display: block;
-    width: 100%;
-    padding: 10px 14px;
-    background: none;
-    border: none;
-    border-top: 1px dashed var(--divider-color);
-    color: var(--primary-color);
-    font-size: 13px;
-    text-align: left;
-    cursor: pointer;
+  /* ── Rule cards ────────────────────────────────────── */
+  .rules-cell { vertical-align: middle; padding: 6px 8px; }
+  .rule-card {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--secondary-background-color, rgba(0,0,0,.03));
+    border-radius: 8px; padding: 5px 8px; margin-bottom: 4px;
+    border: 1px solid transparent; transition: border-color .15s;
   }
-  .add-rule-btn:hover { background: var(--secondary-background-color); }
+  .rule-card:hover { border-color: var(--divider-color); }
+  .rule-card:last-of-type { margin-bottom: 0; }
+  .rule-card.row-invalid { opacity: .55; }
+  .rule-card .cond-wrap { flex: 1; }
+  /* ── Add action button ─────────────────────────────── */
+  .add-col { width: 64px; text-align: center; vertical-align: middle; }
+  .add-action-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--primary-color); font-size: 22px; line-height: 1;
+    padding: 4px 8px; border-radius: 50%;
+    transition: background .12s;
+  }
+  .add-action-btn:hover { background: var(--secondary-background-color); }
   
   .add-group-btn {
     display: inline-flex;
@@ -657,10 +668,11 @@ class SmartShadesPanel extends HTMLElement {
       }
       
       const picker = groupEl.querySelector('.cover-picker');
-      const covers = picker ? JSON.parse(picker.dataset.covers || '[]') : [];
+      const covers = (picker ? JSON.parse(picker.dataset.covers || '[]') : [])
+        .sort((a,b) => (a.slice(6)||a).localeCompare(b.slice(6)||b));
       
       const rules = [];
-      for (const row of groupEl.querySelectorAll('tr.rule-row')) {
+      for (const row of groupEl.querySelectorAll('.rule-row')) {
         const condStr = row.querySelector('.f-cond').value;
         const conditions = parseCondition(condStr);
         
@@ -694,7 +706,6 @@ class SmartShadesPanel extends HTMLElement {
     }).join('');
     return `<div class="cover-picker" data-covers='${JSON.stringify(covers || [])}'>
       <div class="chips">${chips}</div>
-      <input class="cover-add" list="covers-list" placeholder="add cover…" autocomplete="off" />
     </div>`;
   }
 
@@ -875,73 +886,61 @@ class SmartShadesPanel extends HTMLElement {
         const isLastInMode  = posInMode === modeGroupIdxs.length - 1;
         const hasGroupOv = (group.covers || []).some(c => overrides.has(c));
         const rules = group.rules || [];
-        const rowspan = rules.length + 1;
 
-        const coversCellHtml = `
-          <td rowspan="${rowspan}" class="covers-cell">
-            <div class="covers-cell-inner">
-              <div class="covers-content">
-                ${this._coverPickerHtml(group.covers)}
-                ${hasGroupOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
-              </div>
-              <div class="group-btns">
-                <button class="icon-btn up-group-btn" data-gidx="${gIdx}" ${isFirstInMode ? 'disabled' : ''} title="Move group up">▲</button>
-                <button class="icon-btn dn-group-btn" data-gidx="${gIdx}" ${isLastInMode  ? 'disabled' : ''} title="Move group down">▼</button>
-                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete group">✕</button>
-              </div>
-            </div>
-          </td>`;
-
-        let rowsHtml = '';
-        for (let rIdx = 0; rIdx < rules.length; rIdx++) {
-          const r = rules[rIdx];
+        const cardsHtml = rules.map((r, rIdx) => {
           const hasContent = (r.conditions && r.conditions.length > 0) || r.action?.position != null || r.action?.tilt != null;
           const isInvalid = hasContent && r.action?.position == null && r.action?.tilt == null;
           const condStr = formatCondition(r.conditions);
+          return `
+            <div class="rule-card rule-row${isInvalid ? ' row-invalid' : ''}" data-gidx="${gIdx}" data-ridx="${rIdx}">
+              <div class="cond-wrap">
+                <input class="f-cond" value="${condStr}" placeholder="condition…" />
+                <span class="cond-badge ${validateCondition(condStr).ok ? '' : 'error'}">${condStr && !validateCondition(condStr).ok ? '✗' : ''}</span>
+              </div>
+              <div class="pt-row">
+                <input class="f-pos narrow" type="number" min="0" max="100" inputmode="numeric"
+                  value="${r.action?.position ?? ''}" placeholder="—" />
+                ${posBarHtml(r.action?.position)}
+              </div>
+              <div class="pt-row">
+                ${tiltBarHtml(r.action?.tilt)}
+                <input class="f-tilt narrow" type="number" min="0" max="100" inputmode="numeric"
+                  value="${r.action?.tilt ?? ''}" placeholder="—" />
+              </div>
+              <div class="row-btns">
+                <button class="icon-btn up-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
+                  ${rIdx === 0 ? 'disabled' : ''} title="Move rule up">▲</button>
+                <button class="icon-btn dn-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
+                  ${rIdx === rules.length - 1 ? 'disabled' : ''} title="Move rule down">▼</button>
+                <button class="icon-btn del del-rule-btn" data-gidx="${gIdx}" data-ridx="${rIdx}" title="Delete rule">✕</button>
+              </div>
+            </div>`;
+        }).join('');
 
-          rowsHtml += `
-            <tr class="rule-row${isInvalid ? ' row-invalid' : ''}" data-gidx="${gIdx}" data-ridx="${rIdx}">
-              ${rIdx === 0 ? coversCellHtml : ''}
-              <td>
-                <div class="cond-wrap">
-                  <input class="f-cond" value="${condStr}" placeholder="-" />
-                  <span class="cond-badge ${validateCondition(condStr).ok ? '' : 'error'}">${condStr && !validateCondition(condStr).ok ? '✗' : ''}</span>
-                </div>
-              </td>
-              <td class="pt-cell">
-                <div class="pt-row">
-                  <input class="f-pos narrow" type="number" min="0" max="100" inputmode="numeric"
-                    value="${r.action?.position ?? ''}" placeholder="—" />
-                  ${posBarHtml(r.action?.position)}
-                </div>
-              </td>
-              <td class="pt-cell">
-                <div class="pt-row">
-                  ${tiltBarHtml(r.action?.tilt)}
-                  <input class="f-tilt narrow" type="number" min="0" max="100" inputmode="numeric"
-                    value="${r.action?.tilt ?? ''}" placeholder="—" />
-                </div>
-              </td>
-              <td>
-                <div class="row-btns">
-                  <button class="icon-btn up-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
-                    ${rIdx === 0 ? 'disabled' : ''} title="Move rule up">▲</button>
-                  <button class="icon-btn dn-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
-                    ${rIdx === rules.length - 1 ? 'disabled' : ''} title="Move rule down">▼</button>
-                  <button class="icon-btn del del-rule-btn" data-gidx="${gIdx}" data-ridx="${rIdx}" title="Delete rule">✕</button>
-                </div>
-              </td>
-            </tr>`;
-        }
-
-        const emptyCovers = rules.length === 0 ? coversCellHtml : '';
         return `
           <tbody class="cover-group" data-mode="${mode}" data-gidx="${gIdx}">
-            ${rowsHtml}
-            <tr class="add-row">
-              ${emptyCovers}
-              <td colspan="4">
-                <button class="add-rule-btn" data-gidx="${gIdx}">＋ Add Action</button>
+            <tr>
+              <td class="covers-cell">
+                <div class="covers-inner">
+                  <div class="covers-content">
+                    ${this._coverPickerHtml(group.covers)}
+                    ${hasGroupOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
+                  </div>
+                  <div class="covers-bottom">
+                    <input class="cover-add" list="covers-list" placeholder="add cover…" autocomplete="off" />
+                    <div class="group-btns">
+                    <button class="icon-btn up-group-btn" data-gidx="${gIdx}" ${isFirstInMode ? 'disabled' : ''} title="Move group up">▲</button>
+                    <button class="icon-btn dn-group-btn" data-gidx="${gIdx}" ${isLastInMode  ? 'disabled' : ''} title="Move group down">▼</button>
+                    <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete group">✕</button>
+                  </div>
+                  </div>
+                </div>
+              </td>
+              <td class="rules-cell" colspan="4">
+                ${cardsHtml}
+              </td>
+              <td class="add-col">
+                <button class="add-action-btn" data-gidx="${gIdx}" title="Add rule">＋</button>
               </td>
             </tr>
           </tbody>`;
@@ -962,12 +961,18 @@ class SmartShadesPanel extends HTMLElement {
         </div>`;
 
       const isCollapsed = this._collapsedModes.has(mode);
+      const modeGroups = this._groups.filter(g => g.mode === mode);
+      const groupCount = modeGroups.length;
+      const ruleCount = modeGroups.reduce((s, g) => s + (g.rules?.length ?? 0), 0);
+      const summaryText = groupCount === 0 ? 'No groups' :
+        `${groupCount} ${groupCount === 1 ? 'group' : 'groups'}, ${ruleCount} ${ruleCount === 1 ? 'rule' : 'rules'}`;
       return `
         <div class="mode-section${isCollapsed ? ' collapsed' : ''}" id="mode-sec-${mode}" data-mode="${mode}">
           <div class="section-heading${isSpecial ? ' section-special' : ''}" data-mode="${mode}">
             <span>${MODE_LABELS[mode] || mode}${this._orphaned.has(mode) ? ' <span class="orphan-warn">⚠ not in input_select</span>' : ''}</span>
             <button class="collapse-btn" data-mode="${mode}" title="${isCollapsed ? 'Expand section' : 'Collapse section'}">${isCollapsed ? '▶' : '▼'}</button>
           </div>
+          <div class="collapsed-summary" data-mode="${mode}">${summaryText} — click to expand</div>
           ${modeOptsHtml}
           <div class="table-card">
             <table>
@@ -975,9 +980,10 @@ class SmartShadesPanel extends HTMLElement {
                 <tr>
                   <th style="width:340px">Covers</th>
                   <th>Condition</th>
-                  <th style="width:88px;text-align:center">Pos</th>
-                  <th style="width:88px;text-align:center">Tilt</th>
+                  <th style="width:88px;text-align:center;padding-left:10px;padding-right:28px">Pos</th>
+                  <th style="width:88px;text-align:center;padding-left:10px;padding-right:66px">Tilt</th>
                   <th style="width:96px"></th>
+                  <th style="width:64px"></th>
                 </tr>
               </thead>
               ${groupsHtml}
@@ -1144,6 +1150,12 @@ class SmartShadesPanel extends HTMLElement {
         this._render();
       })
     );
+    root.querySelectorAll('.collapsed-summary').forEach(el =>
+      el.addEventListener('click', () => {
+        this._collapsedModes.delete(el.dataset.mode);
+        this._render();
+      })
+    );
     root.querySelectorAll('.up-group-btn').forEach(btn =>
       btn.addEventListener('click', () => this._moveGroup(+btn.dataset.gidx, -1))
     );
@@ -1161,7 +1173,7 @@ class SmartShadesPanel extends HTMLElement {
     );
     root.querySelector('#undo-btn')?.addEventListener('click', () => this._undoDelete());
     
-    root.querySelectorAll('.add-rule-btn').forEach(btn =>
+    root.querySelectorAll('.add-action-btn').forEach(btn =>
       btn.addEventListener('click', () => this._addRule(+btn.dataset.gidx))
     );
     root.querySelectorAll('.del-rule-btn').forEach(btn =>
@@ -1190,7 +1202,7 @@ class SmartShadesPanel extends HTMLElement {
         btn.addEventListener('click', () => {
           const covers = JSON.parse(picker.dataset.covers || '[]');
           picker.dataset.covers = JSON.stringify(
-            covers.filter(c => c !== btn.dataset.cover)
+            covers.filter(c => c !== btn.dataset.cover).sort((a,b) => (a.slice(6)||a).localeCompare(b.slice(6)||b))
           );
           picker.querySelector('.chips').innerHTML = JSON.parse(picker.dataset.covers)
             .map(c => `<span class="chip">${c}<button class="chip-rm" data-cover="${c}">✕</button></span>`)
@@ -1203,13 +1215,14 @@ class SmartShadesPanel extends HTMLElement {
 
     root.querySelectorAll('.cover-picker').forEach(picker => {
       rebindChips(picker);
-      const inp = picker.querySelector('.cover-add');
+      const inp = picker.closest('.covers-inner')?.querySelector('.cover-add');
       const commit = () => {
         const val = inp.value.trim();
         if (!val) return;
         const covers = JSON.parse(picker.dataset.covers || '[]');
         if (!covers.includes(val)) {
           covers.push(val);
+          covers.sort((a,b) => (a.slice(6)||a).localeCompare(b.slice(6)||b));
           picker.dataset.covers = JSON.stringify(covers);
           picker.querySelector('.chips').innerHTML = covers
             .map(c => `<span class="chip">${c}<button class="chip-rm" data-cover="${c}">✕</button></span>`)
