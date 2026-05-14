@@ -935,6 +935,7 @@ class SmartShadesPanel extends HTMLElement {
               <button id="llm-btn">Generate LLM Prompt</button>
               <button id="export-btn">Export</button>
               <button id="import-btn">Import</button>
+              <button id="integration-btn">Integration Settings</button>
             </div>
           </div>
         </div>
@@ -1197,6 +1198,11 @@ class SmartShadesPanel extends HTMLElement {
       this._collect();
       const json = JSON.stringify(this._groups, null, 2);
       copyToClipboard(json, 'Export Rules');
+    });
+
+    root.querySelector('#integration-btn')?.addEventListener('click', () => {
+      window.history.pushState(null, '', '/config/integrations/integration/smart_shades');
+      window.dispatchEvent(new PopStateEvent('popstate'));
     });
 
     root.querySelector('#import-btn')?.addEventListener('click', () => {

@@ -6,12 +6,12 @@
         "description": "Select the `input_select` helper whose options define your automation modes.",
         "data": {
           "mode_entity": "Mode entity (input_select)",
-          "dnd_entity": "Do-not-disturb sensor (optional)",
+          "armed_entity": "Armed sensor (optional)",
           "override_duration_entity": "Override duration entity (optional)"
         },
         "data_description": {
           "mode_entity": "The input_select whose options define your automation modes.",
-          "dnd_entity": "A binary_sensor that is `on` when automation should pause. Overrides the time-based DND window.",
+          "armed_entity": "When this binary_sensor is `on`, automation runs. When `off`, all shade movements are paused. If omitted, automation always runs.",
           "override_duration_entity": "An input_number (in hours) controlling how long manual overrides last. Overrides the built-in 4-hour default."
         }
       }
@@ -28,20 +28,18 @@
     "step": {
       "edit_settings": {
         "title": "Global settings",
-        "description": "Rules are managed in the **Shade Scheduler** panel in the sidebar.",
+        "description": "Rules are managed in the [Shade Scheduler](/smart-shades) panel in the sidebar.",
         "data": {
           "tolerance": "Position tolerance (%)",
-          "dnd_start": "Do-not-disturb start",
-          "dnd_end": "Do-not-disturb end",
-          "override_duration": "Manual override duration (seconds)",
-          "tilt_delay": "Position-to-tilt delay (seconds)"
+          "override_duration": "Manual override duration (minutes)",
+          "tilt_delay": "Position-to-tilt delay (seconds)",
+          "armed_entity": "Armed sensor (optional)"
         },
         "data_description": {
           "tolerance": "A cover is only moved if it deviates more than this many percent from the target.",
-          "dnd_start": "No automated movements after this time.",
-          "dnd_end": "Automated movements resume at this time.",
-          "override_duration": "How long a manual move suppresses automation. Default 2 s (testing). Set to 14400 for 4 hours.",
-          "tilt_delay": "When both position and tilt need to change, tilt is sent this many seconds after the position command — giving the cover time to finish moving first."
+          "override_duration": "How long a manual move suppresses automation (in minutes). Default 120 = 2 hours.",
+          "tilt_delay": "When both position and tilt need to change, tilt is sent this many seconds after the position command — giving the cover time to finish moving first.",
+          "armed_entity": "When `on`, automation runs. When `off`, shade movements are paused. Clear to always run."
         }
       }
     }

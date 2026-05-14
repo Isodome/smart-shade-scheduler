@@ -1,7 +1,6 @@
 """Pure rule-matching logic — no Home Assistant imports, fully unit-testable."""
 
 import operator
-from datetime import time
 
 from .const import BUILT_IN_VARS
 
@@ -162,15 +161,3 @@ def normalize_groups(rules: list) -> list:
     return out
 
 
-def is_dnd_active(start_str: str, end_str: str, now: time) -> bool:
-    """Return True if *now* falls within the DND window."""
-    try:
-        start_parts = list(map(int, start_str.split(":")))
-        end_parts   = list(map(int, end_str.split(":")))
-        start = time(*start_parts)
-        end   = time(*end_parts)
-        if start <= end:
-            return start <= now <= end
-        return now >= start or now <= end  # overnight window e.g. 22:00–07:00
-    except Exception:
-        return False

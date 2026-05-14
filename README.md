@@ -92,8 +92,8 @@ Covers are entered as autocomplete chips from all `cover.*` entities in HA. Chip
 ### Orphaned mode tabs
 If a mode is removed from the input_select but still has rules, its tab is kept with a dashed orange border so no rules are silently lost.
 
-### Do-not-disturb window
-Configurable time range (default 22:00–07:00) during which no automated movements are made. Can be driven by a binary sensor (e.g. a sleep tracker) instead of a fixed time window.
+### Armed sensor
+An optional `binary_sensor` controls whether automation runs. When the sensor is `on`, automation is armed. When `off`, all evaluation is skipped. If no sensor is configured, automation always runs.
 
 ### Daily override reset
 All manual overrides are wiped at a configurable time each day (default 04:00) so every day starts clean.
@@ -136,9 +136,9 @@ Rules are stored in HA's config entry options (`.storage/core.config_entries`). 
 
 1. Go to **Settings → Devices & Services → Add Integration** and search for **Smart Shade Scheduler**.
 2. Select the **mode entity** (`input_select`) whose state names the current mode.
-3. Optionally select a DND binary sensor and/or an override duration entity.
+3. Optionally select an armed sensor (binary_sensor) and/or an override duration entity.
 4. Open the **Shades** panel in the sidebar to add and manage rules.
-5. Use **Settings → Devices & Services → Smart Shade Scheduler → Configure** to adjust global settings (tolerance, DND times, daily wipe time, override duration).
+5. Use **Settings → Devices & Services → Smart Shade Scheduler → Configure** to adjust global settings (tolerance, override duration, tilt delay).
 
 ---
 
@@ -160,10 +160,8 @@ At least one of position or tilt must be set for a row to be active.
 | Setting | Default | Description |
 |---|---|---|
 | Position tolerance | 5 % | A cover is only moved if it deviates more than this from the target |
-| DND start | 22:00 | No automated movements after this time |
-| DND end | 07:00 | Automated movements resume at this time |
-| Daily wipe time | 04:00 | All manual overrides are cleared at this time each day |
 | Override duration | 2 s | How long a manual move suppresses automation |
+| Tilt delay | 30 s | Seconds between position and tilt commands |
 
 ---
 
@@ -186,7 +184,14 @@ An automation sets this entity based on weather forecast, time of day, or manual
 
 ## Roadmap & backlog
 
+### Known Bugs
+- **Tilt position doesn't work** — sometimes gets stuck and fails to update.
+- **Overrides are broken** — manual override detection not functioning as expected.
+- **Validation checkmark is inconsistent** — UI validation state doesn't always reflect current rules correctly.
+
 ### Planned
+- **Responsive Design** — improve mobile and tablet layout for the sidebar panel.
+- **Change order of groups** — add buttons to reorder cover group cards.
 - **Temporary-position service** — set a cover position/tilt that holds only until the next rule evaluation, without triggering the manual-override timer. Useful for one-off adjustments that should self-correct.
 - **One-shot rule flag** — mark a rule as "fire once per day". After it fires for a cover, the cover is left alone until the daily reset, even if conditions remain true. Useful for morning-open rules that should not re-enforce after a manual adjustment.
 

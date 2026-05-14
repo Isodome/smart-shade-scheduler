@@ -6,16 +6,12 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_DND_END,
-    CONF_DND_ENTITY,
-    CONF_DND_START,
+    CONF_ARMED_ENTITY,
     CONF_MODE_ENTITY,
     CONF_OVERRIDE_DURATION,
     CONF_OVERRIDE_DURATION_ENTITY,
     CONF_TILT_DELAY,
     CONF_TOLERANCE,
-    DEFAULT_DND_END,
-    DEFAULT_DND_START,
     DEFAULT_OVERRIDE_DURATION,
     DEFAULT_TILT_DELAY,
     DEFAULT_TOLERANCE,
@@ -35,20 +31,12 @@ def _settings_schema(opts: dict) -> vol.Schema:
                 )
             ),
             vol.Optional(
-                CONF_DND_START,
-                default=opts.get(CONF_DND_START, DEFAULT_DND_START),
-            ): selector.TimeSelector(),
-            vol.Optional(
-                CONF_DND_END,
-                default=opts.get(CONF_DND_END, DEFAULT_DND_END),
-            ): selector.TimeSelector(),
-            vol.Optional(
                 CONF_OVERRIDE_DURATION,
                 default=opts.get(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
-                    min=1, max=86400, step=1, mode="box",
-                    unit_of_measurement="s",
+                    min=1, max=1440, step=1, mode="box",
+                    unit_of_measurement="min",
                 )
             ),
             vol.Optional(
@@ -59,6 +47,12 @@ def _settings_schema(opts: dict) -> vol.Schema:
                     min=0, max=120, step=1, mode="slider",
                     unit_of_measurement="s",
                 )
+            ),
+            vol.Optional(
+                CONF_ARMED_ENTITY,
+                description={"suggested_value": opts.get(CONF_ARMED_ENTITY)},
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor")
             ),
         }
     )
@@ -88,8 +82,8 @@ class SmartShadesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     updates={CONF_MODE_ENTITY: entity_id}
                 )
                 data: dict = {CONF_MODE_ENTITY: entity_id}
-                if user_input.get(CONF_DND_ENTITY):
-                    data[CONF_DND_ENTITY] = user_input[CONF_DND_ENTITY]
+                if user_input.get(CONF_ARMED_ENTITY):
+                    data[CONF_ARMED_ENTITY] = user_input[CONF_ARMED_ENTITY]
                 if user_input.get(CONF_OVERRIDE_DURATION_ENTITY):
                     data[CONF_OVERRIDE_DURATION_ENTITY] = (
                         user_input[CONF_OVERRIDE_DURATION_ENTITY]
@@ -105,7 +99,7 @@ class SmartShadesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_MODE_ENTITY): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="input_select")
                     ),
-                    vol.Optional(CONF_DND_ENTITY): selector.EntitySelector(
+                    vol.Optional(CONF_ARMED_ENTITY): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="binary_sensor")
                     ),
                     vol.Optional(
@@ -129,7 +123,7 @@ class SmartShadesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 # ---------------------------------------------------------------------------
 
 class SmartShadesOptionsFlow(config_entries.OptionsFlow):
-    """Manage global settings (tolerance, DND, tilt delay) via the cogwheel."""
+    """Manage global settings (tolerance, tilt delay) via the cogwheel."""
 
     def __init__(self) -> None:
         pass
@@ -144,13 +138,13 @@ class SmartShadesOptionsFlow(config_entries.OptionsFlow):
                 data={
                     **self.config_entry.options,
                     CONF_TOLERANCE: int(user_input[CONF_TOLERANCE]),
-                    CONF_DND_START: user_input[CONF_DND_START],
-                    CONF_DND_END: user_input[CONF_DND_END],
                     CONF_OVERRIDE_DURATION: int(user_input[CONF_OVERRIDE_DURATION]),
                     CONF_TILT_DELAY: int(user_input[CONF_TILT_DELAY]),
+                    CONF_ARMED_ENTITY: user_input.get(CONF_ARMED_ENTITY) or None,
                 },
             )
+        merged = {**self.config_entry.data, **self.config_entry.options}
         return self.async_show_form(
             step_id="edit_settings",
-            data_schema=_settings_schema(self.config_entry.options),
+            data_schema=_settings_schema(merged),
         )

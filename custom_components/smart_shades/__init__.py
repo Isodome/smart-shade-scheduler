@@ -12,13 +12,11 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
-from .logic import evaluate_rules, fill_targets, is_dnd_active, rule_matches
+from .logic import evaluate_rules, fill_targets, rule_matches
 from .const import (
     BUILT_IN_VARS,
     CONF_CUSTOM_VARS,
-    CONF_DND_END,
-    CONF_DND_ENTITY,
-    CONF_DND_START,
+    CONF_ARMED_ENTITY,
     CONF_MODE_CONFIG,
     CONF_MODE_ENTITY,
     CONF_OVERRIDE_DURATION,
@@ -26,8 +24,6 @@ from .const import (
     CONF_RULES,
     CONF_TILT_DELAY,
     CONF_TOLERANCE,
-    DEFAULT_DND_END,
-    DEFAULT_DND_START,
     DEFAULT_OVERRIDE_DURATION,
     DEFAULT_TILT_DELAY,
     DEFAULT_TOLERANCE,
@@ -185,6 +181,16 @@ class ShadeManager:
         )
 
         self.reinit_mode_listener()
+        self._reinit_armed_listener()
+
+    def _reinit_armed_listener(self) -> None:
+        armed_entity = self._opt(CONF_ARMED_ENTITY, None)
+        if armed_entity:
+            self._unsub.append(
+                async_track_state_change_event(
+                    self.hass, armed_entity, self._on_armed_change
+                )
+            )
 
     def reinit_mode_listener(self) -> None:
         """(Re-)register the mode entity state change listener."""
@@ -277,6 +283,12 @@ class ShadeManager:
         self.hass.async_create_task(self.async_evaluate_rules())
 
     @callback
+    def _on_armed_change(self, event) -> None:
+        new_state = event.data.get("new_state")
+        if new_state and new_state.state == "on":
+            self.hass.async_create_task(self.async_evaluate_rules())
+
+    @callback
     def _on_sun_change(self, _event) -> None:
         self.hass.async_create_task(self.async_evaluate_rules())
 
@@ -294,17 +306,16 @@ class ShadeManager:
             key, self.entry.data.get(key, default)
         )
 
-    def _is_dnd_active(self) -> bool:
-        # Binary sensor entity overrides manual time window if configured
-        dnd_entity = self.entry.data.get(CONF_DND_ENTITY)
-        if dnd_entity:
-            state = self.hass.states.get(dnd_entity)
-            if state:
-                return state.state == "on"
-
-        start_str = self._opt(CONF_DND_START, DEFAULT_DND_START)
-        end_str   = self._opt(CONF_DND_END,   DEFAULT_DND_END)
-        return is_dnd_active(start_str, end_str, datetime.now().time())
+    def _is_armed(self) -> bool:
+        """Return True if automation should run. False when armed sensor is off."""
+        armed_entity = self._opt(CONF_ARMED_ENTITY, None)
+        if not armed_entity:
+            return True
+        state = self.hass.states.get(armed_entity)
+        if state is None:
+            _LOGGER.warning("Armed sensor %s not found — running armed (fail-open)", armed_entity)
+            return True
+        return state.state == "on"
 
     def _override_duration(self) -> timedelta:
         # Entity-based override takes priority (backwards compat)
@@ -316,8 +327,8 @@ class ShadeManager:
                     return timedelta(hours=float(state.state))
                 except ValueError:
                     pass
-        seconds = int(self._opt(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION))
-        return timedelta(seconds=seconds)
+        minutes = int(self._opt(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION))
+        return timedelta(minutes=minutes)
 
     def _tolerance(self) -> int:
         return int(self._opt(CONF_TOLERANCE, DEFAULT_TOLERANCE))
@@ -366,8 +377,8 @@ class ShadeManager:
     _fill_targets  = staticmethod(fill_targets)
 
     async def _do_evaluate(self) -> None:
-        if self._is_dnd_active():
-            _LOGGER.debug("DND active — skipping evaluation")
+        if not self._is_armed():
+            _LOGGER.debug("Armed sensor off — skipping evaluation")
             return
 
         mode_entity = self.entry.data.get(CONF_MODE_ENTITY)

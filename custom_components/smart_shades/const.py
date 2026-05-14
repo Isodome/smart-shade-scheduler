@@ -5,8 +5,6 @@ DOMAIN = "smart_shades"
 # Top-level config / options keys
 CONF_MODE_ENTITY = "mode_entity"
 CONF_TOLERANCE = "tolerance"
-CONF_DND_START = "dnd_start"
-CONF_DND_END = "dnd_end"
 CONF_RULES = "rules"
 
 # Rule dict keys
@@ -17,7 +15,7 @@ RULE_POSITION = "position"
 RULE_TILT = "tilt"
 
 # Optional helper entities that override manually-entered values
-CONF_DND_ENTITY = "dnd_entity"           # binary_sensor: on = DND active
+CONF_ARMED_ENTITY = "armed_entity"       # binary_sensor: on = automation armed
 CONF_OVERRIDE_DURATION_ENTITY = "override_duration_entity"
 CONF_MODE_CONFIG     = "mode_config"     # dict: mode → {block_fallback, force}
 
@@ -51,12 +49,10 @@ PRIORITY_MODE = "_priority"
 FALLBACK_MODE = "_fallback"
 SPECIAL_MODES = {PRIORITY_MODE, FALLBACK_MODE}
 
-# Defaults (time values as HH:MM:SS to match TimeSelector output)
+# Defaults
 DEFAULT_TOLERANCE = 5
-DEFAULT_DND_START = "22:00:00"
-DEFAULT_DND_END = "07:00:00"
 
 # Behaviour
-CONF_OVERRIDE_DURATION = "override_duration"   # seconds, stored in options
-DEFAULT_OVERRIDE_DURATION = 2                  # seconds
+CONF_OVERRIDE_DURATION = "override_duration"   # minutes, stored in options
+DEFAULT_OVERRIDE_DURATION = 120                # minutes (2 hours)
 SCAN_INTERVAL_MINUTES = 15
