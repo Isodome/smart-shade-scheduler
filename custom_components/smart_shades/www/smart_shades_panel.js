@@ -427,18 +427,24 @@ const CSS = `
     background: var(--card-background-color);
     border-radius: 10px;
     box-shadow: 0 4px 20px rgba(0,0,0,.2);
-    min-width: 190px;
+    min-width: 200px;
     z-index: 100;
     overflow: hidden;
   }
   .hamburger-menu.open { display: block; }
+  .menu-section { border-top: 1px solid var(--divider-color); }
+  .menu-section:first-child { border-top: none; }
+  .menu-section-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em;
+    opacity: 0.5; padding: 8px 16px 3px; pointer-events: none;
+  }
   .hamburger-menu button {
-    display: block; width: 100%; padding: 11px 16px;
-    text-align: left; background: none; border: none; border-bottom: 1px solid var(--divider-color);
+    display: block; width: 100%; padding: 9px 16px;
+    text-align: left; background: none; border: none;
     color: var(--primary-text-color); cursor: pointer; font-size: 13px;
   }
-  .hamburger-menu button:last-child { border-bottom: none; }
   .hamburger-menu button:hover { background: var(--secondary-background-color); }
+  .hamburger-menu .menu-external::after { content: ' ↗'; opacity: 0.5; font-size: 11px; }
   dialog {
     border: none;
     border-radius: 12px;
@@ -931,11 +937,20 @@ class SmartShadesPanel extends HTMLElement {
           <div class="hamburger-wrap">
             <button class="hamburger-btn" id="hamburger-btn" title="More options">☰</button>
             <div class="hamburger-menu" id="hamburger-menu">
-              <button id="vars-btn">Custom Variables</button>
-              <button id="llm-btn">Generate LLM Prompt</button>
-              <button id="export-btn">Export</button>
-              <button id="import-btn">Import</button>
-              <button id="integration-btn">Integration Settings</button>
+              <div class="menu-section">
+                <div class="menu-section-label">Options</div>
+                <button id="vars-btn" title="Bind short names to HA entities or templates for use in conditions">Custom Variables</button>
+                <button id="integration-btn" title="Open the HA integrations page for this integration">Integration Settings</button>
+              </div>
+              <div class="menu-section">
+                <div class="menu-section-label">Tools</div>
+                <button id="export-btn" title="Copy all rules as JSON to the clipboard">Export Rules</button>
+                <button id="import-btn" title="Replace all rules by pasting JSON — this overwrites everything">Import Rules</button>
+                <button id="llm-btn" title="Copy a full system prompt + current rules to the clipboard, ready to paste into an AI assistant">Generate LLM Prompt</button>
+              </div>
+              <div class="menu-section">
+                <button id="github-btn" class="menu-external">GitHub</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1203,6 +1218,10 @@ class SmartShadesPanel extends HTMLElement {
     root.querySelector('#integration-btn')?.addEventListener('click', () => {
       window.history.pushState(null, '', '/config/integrations/integration/smart_shades');
       window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    root.querySelector('#github-btn')?.addEventListener('click', () => {
+      window.open('https://github.com/Isodome/smart-shade-scheduler', '_blank');
     });
 
     root.querySelector('#import-btn')?.addEventListener('click', () => {
