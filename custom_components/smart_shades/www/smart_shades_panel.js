@@ -194,13 +194,15 @@ const CSS = `
   }
 
   /* ── Mode sections ─────────────────────────────────── */
-  .mode-section { margin-bottom: 24px; scroll-margin-top: 60px; }
+  .mode-section { margin-bottom: 44px; scroll-margin-top: 60px; }
   .section-heading {
     display: flex; align-items: center; justify-content: space-between;
-    font-size: 13px; font-weight: 700; letter-spacing: .06em;
+    font-size: 15px; font-weight: 700; letter-spacing: .05em;
     color: var(--secondary-text-color);
-    margin-bottom: 8px; text-transform: uppercase; cursor: pointer;
+    margin-bottom: 14px; text-transform: uppercase; cursor: pointer;
     user-select: none;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--divider-color);
   }
   .section-heading:hover { color: var(--primary-text-color); }
   .collapse-btn {
@@ -292,8 +294,6 @@ const CSS = `
   input::placeholder { color: var(--secondary-text-color); opacity: .6; }
 
   /* ── Row actions ───────────────────────────────────── */
-  .row-btns { display: flex; gap: 2px; align-items: center; justify-content: flex-end; opacity: 0; transition: opacity .15s; flex-shrink: 0; width: 108px; }
-  .rule-card:hover .row-btns { opacity: 1; }
   .icon-btn {
     background: none;
     border: none;
@@ -308,18 +308,10 @@ const CSS = `
   .icon-btn:hover { background: var(--secondary-background-color); color: var(--primary-text-color); }
   .up-btn:hover, .dn-btn:hover, .up-group-btn:hover, .dn-group-btn:hover { background: var(--primary-color); color: var(--text-primary-color, #fff); }
   .icon-btn:disabled { opacity: .12; cursor: default; }
-  .up-btn:disabled, .dn-btn:disabled { visibility: hidden; }
-  .up-group-btn:disabled, .dn-group-btn:disabled { display: none; }
   .icon-btn.del:hover { background: var(--error-color, #b00020); color: #fff; }
   .override-icon { color: #ff9800; cursor: default; font-size: 14px; margin-left: 4px; }
   /* ── Group action buttons ──────────────────────────── */
-  .group-btns {
-    display: flex; flex-direction: row; gap: 2px; justify-content: flex-end;
-    opacity: 0; transition: opacity .15s;
-  }
-  .cover-group:hover .group-btns { opacity: 1; }
   /* ── Pos/tilt bars ─────────────────────────────────── */
-  .pt-cell { width: 80px; }
   .pt-row { display: flex; align-items: center; justify-content: center; gap: 4px; }
   /* vertical position bar */
   .pos-bar-track {
@@ -410,7 +402,7 @@ const CSS = `
   }
 
   /* ── Rule cards ────────────────────────────────────── */
-  .rules-cell { vertical-align: middle; padding: 6px 8px; }
+  .rules-cell { vertical-align: middle; padding: 3px 8px; }
   .rule-card {
     display: flex; align-items: center; gap: 8px;
     background: var(--secondary-background-color, rgba(0,0,0,.03));
@@ -595,6 +587,64 @@ const CSS = `
     font-size: 14px; cursor: pointer; padding: 0;
   }
   .undo-toast-btn:hover { text-decoration: underline; }
+
+  /* ── Overflow (three-dot) menu ─────────────────────── */
+  .overflow-wrap { display: block; position: relative; flex-shrink: 0; }
+  .overflow-btn { font-size: 18px; letter-spacing: -2px; padding: 5px 6px; }
+  .overflow-drop {
+    display: none;
+    position: fixed;
+    background: var(--card-background-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    z-index: 200;
+    min-width: 140px;
+    overflow: hidden;
+  }
+  .overflow-drop.open { display: block; }
+  .overflow-item {
+    display: block !important; width: 100%;
+    text-align: left; border-radius: 0 !important;
+    padding: 10px 14px; font-size: 14px; white-space: nowrap;
+  }
+  .overflow-item:disabled { opacity: .45; cursor: default; }
+
+  /* ── Mobile layout (≤640px) ────────────────────────── */
+  @media (max-width: 640px) {
+    :host { padding: 8px 10px; }
+    h1 { font-size: 18px; }
+    .table-card { border-radius: 0; max-width: 100%; background: transparent; box-shadow: none; padding: 0; }
+    tbody.cover-group {
+      background: var(--card-background-color);
+      border-radius: 12px;
+      box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,.12));
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    tbody.cover-group:last-child { margin-bottom: 0; }
+    tbody.cover-group { border-bottom: none; }
+    table { display: block; }
+    thead { display: none; }
+    tbody.cover-group { display: block; }
+    tbody.cover-group tr { display: flex; flex-direction: column; }
+    td.covers-cell, td.rules-cell, td.add-col {
+      width: 100% !important; box-sizing: border-box; display: block;
+    }
+    td.covers-cell {
+      border-right: none;
+      border-bottom: 1px solid var(--divider-color);
+      height: auto !important;
+    }
+    .covers-inner { height: auto !important; }
+    td.add-col { text-align: center; padding: 6px 10px; }
+    .add-action-btn { font-size: 18px; }
+    .rule-card { flex-wrap: nowrap; gap: 4px; }
+    .rule-card .cond-wrap { flex: 1; min-width: 0; }
+    .mode-opts { flex-direction: column; gap: 12px; }
+    .tab-bar-wrap { flex-wrap: wrap; }
+    input.narrow { width: 46px; }
+    .chip-label { max-width: 140px; }
+  }
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -907,12 +957,15 @@ class SmartShadesPanel extends HTMLElement {
                 <input class="f-tilt narrow" type="number" min="0" max="100" inputmode="numeric"
                   value="${r.action?.tilt ?? ''}" placeholder="—" />
               </div>
-              <div class="row-btns">
-                <button class="icon-btn up-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
-                  ${rIdx === 0 ? 'disabled' : ''} title="Move rule up">▲</button>
-                <button class="icon-btn dn-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
-                  ${rIdx === rules.length - 1 ? 'disabled' : ''} title="Move rule down">▼</button>
-                <button class="icon-btn del del-rule-btn" data-gidx="${gIdx}" data-ridx="${rIdx}" title="Delete rule">✕</button>
+              <div class="overflow-wrap">
+                <button class="icon-btn overflow-btn" title="Rule actions">⋯</button>
+                <div class="overflow-drop">
+                  <button class="icon-btn up-btn overflow-item" data-gidx="${gIdx}" data-ridx="${rIdx}"
+                    ${rIdx === 0 ? 'disabled' : ''}>▲ Move rule up</button>
+                  <button class="icon-btn dn-btn overflow-item" data-gidx="${gIdx}" data-ridx="${rIdx}"
+                    ${rIdx === rules.length - 1 ? 'disabled' : ''}>▼ Move rule down</button>
+                  <button class="icon-btn del del-rule-btn overflow-item" data-gidx="${gIdx}" data-ridx="${rIdx}">✕ Delete rule</button>
+                </div>
               </div>
             </div>`;
         }).join('');
@@ -928,10 +981,13 @@ class SmartShadesPanel extends HTMLElement {
                   </div>
                   <div class="covers-bottom">
                     <input class="cover-add" list="covers-list" placeholder="add cover…" autocomplete="off" />
-                    <div class="group-btns">
-                    <button class="icon-btn up-group-btn" data-gidx="${gIdx}" ${isFirstInMode ? 'disabled' : ''} title="Move group up">▲</button>
-                    <button class="icon-btn dn-group-btn" data-gidx="${gIdx}" ${isLastInMode  ? 'disabled' : ''} title="Move group down">▼</button>
-                    <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete group">✕</button>
+                  <div class="overflow-wrap">
+                    <button class="icon-btn overflow-btn" title="Group actions">⋯</button>
+                    <div class="overflow-drop">
+                      <button class="icon-btn up-group-btn overflow-item" data-gidx="${gIdx}" ${isFirstInMode ? 'disabled' : ''}>▲ Move group up</button>
+                      <button class="icon-btn dn-group-btn overflow-item" data-gidx="${gIdx}" ${isLastInMode ? 'disabled' : ''}>▼ Move group down</button>
+                      <button class="icon-btn del del-group-btn overflow-item" data-gidx="${gIdx}">✕ Delete group</button>
+                    </div>
                   </div>
                   </div>
                 </div>
@@ -978,7 +1034,7 @@ class SmartShadesPanel extends HTMLElement {
             <table>
               <thead>
                 <tr>
-                  <th style="width:340px">Covers</th>
+                  <th style="width:355px">Covers</th>
                   <th>Condition</th>
                   <th style="width:88px;text-align:center;padding-left:10px;padding-right:28px">Pos</th>
                   <th style="width:88px;text-align:center;padding-left:10px;padding-right:66px">Tilt</th>
@@ -989,7 +1045,7 @@ class SmartShadesPanel extends HTMLElement {
               ${groupsHtml}
             </table>
           </div>
-          <button class="add-group-btn" data-mode="${mode}">＋ Add Cover Group</button>
+          <button class="add-group-btn" data-mode="${mode}">＋ Add Cover Group to ${MODE_LABELS[mode] || mode}</button>
         </div>`;
     }).join('');
 
@@ -1335,7 +1391,32 @@ class SmartShadesPanel extends HTMLElement {
       e.stopPropagation();
       hamburgerMenu.classList.toggle('open');
     });
-    root.addEventListener('click', () => hamburgerMenu?.classList.remove('open'));
+    const closeOverflows = () => root.querySelectorAll('.overflow-drop.open').forEach(d => d.classList.remove('open'));
+    root.querySelectorAll('.overflow-btn').forEach(btn =>
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const drop = btn.nextElementSibling;
+        const wasOpen = drop.classList.contains('open');
+        closeOverflows();
+        hamburgerMenu?.classList.remove('open');
+        if (!wasOpen) {
+          const rect = btn.getBoundingClientRect();
+          drop.style.top   = (rect.bottom + 4) + 'px';
+          drop.style.right = (window.innerWidth - rect.right) + 'px';
+          drop.classList.add('open');
+        }
+      })
+    );
+
+    // Remove previous persistent listeners before re-adding to prevent accumulation across renders
+    if (this._rootClickHandler) root.removeEventListener('click', this._rootClickHandler);
+    if (this._scrollHandler) document.removeEventListener('scroll', this._scrollHandler, { capture: true });
+
+    this._rootClickHandler = () => { hamburgerMenu?.classList.remove('open'); closeOverflows(); };
+    this._scrollHandler    = () => closeOverflows();
+
+    root.addEventListener('click', this._rootClickHandler);
+    document.addEventListener('scroll', this._scrollHandler, { capture: true, passive: true });
 
     // ── Tools ─────────────────────────────────────────────────────────
 

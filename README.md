@@ -193,8 +193,6 @@ An automation sets this entity based on weather forecast, time of day, or manual
 - **Validation checkmark is inconsistent** — UI validation state doesn't always reflect current rules correctly.
 
 ### Planned
-- **Responsive Design** — improve mobile and tablet layout for the sidebar panel.
-- **Change order of groups** — add buttons to reorder cover group cards.
 - **Temporary-position service** — set a cover position/tilt that holds only until the next rule evaluation, without triggering the manual-override timer. Useful for one-off adjustments that should self-correct.
 - **One-shot rule flag** — mark a rule as "fire once per day". After it fires for a cover, the cover is left alone until the daily reset, even if conditions remain true. Useful for morning-open rules that should not re-enforce after a manual adjustment.
 
