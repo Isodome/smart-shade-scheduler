@@ -196,10 +196,24 @@ const CSS = `
   /* ── Mode sections ─────────────────────────────────── */
   .mode-section { margin-bottom: 24px; scroll-margin-top: 60px; }
   .section-heading {
+    display: flex; align-items: center; justify-content: space-between;
     font-size: 13px; font-weight: 700; letter-spacing: .06em;
     color: var(--secondary-text-color);
-    margin-bottom: 8px; text-transform: uppercase;
+    margin-bottom: 8px; text-transform: uppercase; cursor: pointer;
+    user-select: none;
   }
+  .section-heading:hover { color: var(--primary-text-color); }
+  .collapse-btn {
+    background: none; border: none; cursor: pointer; padding: 2px 6px;
+    color: var(--secondary-text-color); font-size: 12px; border-radius: 4px;
+    transition: background .12s;
+  }
+  .collapse-btn:hover { background: var(--secondary-background-color); color: var(--primary-text-color); }
+  .mode-section.collapsed .table-card,
+  .mode-section.collapsed .mode-opts,
+  .mode-section.collapsed .add-group-btn { display: none; }
+  .mode-section.collapsed .section-heading { opacity: .5; font-style: italic; }
+  .mode-section.collapsed .section-heading::after { content: ' — collapsed'; font-weight: 400; font-size: 11px; }
 
   /* ── Card / table ──────────────────────────────────── */
   .table-card {
@@ -208,8 +222,9 @@ const CSS = `
     box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,.12));
     overflow: hidden;
     margin-bottom: 12px;
+    max-width: 960px;
   }
-  table { width: 100%; border-collapse: collapse; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   thead th {
     padding: 9px 10px;
     text-align: left;
@@ -232,8 +247,10 @@ const CSS = `
     border-right: 1px solid var(--divider-color);
     padding: 10px;
   }
+  .covers-cell-inner { display: flex; gap: 6px; align-items: flex-start; }
+  .covers-content { flex: 1; min-width: 0; }
   tbody td {
-    padding: 5px 8px;
+    padding: 3px 8px;
     border-bottom: 1px solid var(--divider-color);
     vertical-align: middle;
   }
@@ -247,11 +264,11 @@ const CSS = `
   input {
     border: 1px solid transparent;
     border-radius: 6px;
-    padding: 5px 7px;
+    padding: 4px 6px;
     width: 100%;
     background: transparent;
     color: inherit;
-    font-size: 13px;
+    font-size: 14px;
     transition: border-color .15s, background .15s;
   }
   input:hover {
@@ -264,25 +281,51 @@ const CSS = `
     background: var(--primary-background-color);
   }
   input.narrow { width: 58px; text-align: center; }
+  input.narrow::-webkit-inner-spin-button,
+  input.narrow::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input.narrow[type=number] { -moz-appearance: textfield; appearance: textfield; }
   input::placeholder { color: var(--secondary-text-color); opacity: .6; }
 
   /* ── Row actions ───────────────────────────────────── */
-  .row-btns { display: flex; gap: 2px; align-items: center; }
+  .row-btns { display: flex; gap: 2px; align-items: center; justify-content: flex-end; opacity: 0; transition: opacity .15s; }
+  .rule-row:hover .row-btns { opacity: 1; }
   .icon-btn {
     background: none;
     border: none;
     cursor: pointer;
-    padding: 3px 6px;
+    padding: 5px 8px;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.2;
     color: var(--secondary-text-color);
     transition: background .12s, color .12s;
   }
   .icon-btn:hover { background: var(--secondary-background-color); color: var(--primary-text-color); }
-  .icon-btn:disabled { opacity: .25; cursor: default; }
+  .up-btn:hover, .dn-btn:hover, .up-group-btn:hover, .dn-group-btn:hover { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+  .icon-btn:disabled { opacity: .12; cursor: default; }
+  .up-btn:disabled, .dn-btn:disabled,
+  .up-group-btn:disabled, .dn-group-btn:disabled { display: none; }
   .icon-btn.del:hover { background: var(--error-color, #b00020); color: #fff; }
   .override-icon { color: #ff9800; cursor: default; font-size: 14px; margin-left: 4px; }
+  /* ── Group action buttons ──────────────────────────── */
+  .group-btns {
+    display: flex; flex-direction: column; gap: 2px; flex-shrink: 0;
+    opacity: 0; transition: opacity .15s;
+  }
+  .cover-group:hover .group-btns { opacity: 1; }
+  /* ── Pos/tilt bars ─────────────────────────────────── */
+  .pt-cell { width: 80px; }
+  .pt-row { display: flex; align-items: center; justify-content: center; gap: 4px; }
+  /* vertical position bar */
+  .pos-bar-track {
+    width: 14px; height: 36px; flex-shrink: 0;
+    background: var(--secondary-background-color, rgba(0,0,0,.06)); border-radius: 2px; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: flex-start;
+  }
+  .pos-bar-fill { width: 100%; min-height: 3px; background: linear-gradient(to bottom, rgba(81,110,137,.25), #516E89); transition: height .2s; }
+  /* rotating tilt bar */
+  .tilt-bar-wrap { width: 28px; height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .tilt-bar-wrap svg path { transition: transform .3s; }
 
   /* ── Cover chip picker ─────────────────────────────── */
   .cover-picker { display: flex; flex-direction: column; gap: 4px; }
@@ -291,7 +334,11 @@ const CSS = `
     display: inline-flex; align-items: center; gap: 3px;
     background: var(--primary-color); color: var(--text-primary-color, #fff);
     border-radius: 12px; padding: 2px 6px 2px 8px; font-size: 13px;
-    white-space: nowrap;
+    max-width: 100%; min-width: 0;
+  }
+  .chip-label {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 200px;
   }
   .chip-rm {
     background: none; border: none; cursor: pointer; padding: 0 1px;
@@ -559,6 +606,7 @@ class SmartShadesPanel extends HTMLElement {
     this._modeConfig      = {};   // mode → { block_fallback, force }
     this._customVars = "";   // raw text bindings
     this._varValues  = {};   // all var values (built-ins + custom) from last eval
+    this._collapsedModes = new Set();
   }
 
   set hass(hass) {
@@ -637,8 +685,12 @@ class SmartShadesPanel extends HTMLElement {
     const chips = (covers || []).map(c => {
       const known = c in states;
       const cls = known ? 'chip' : 'chip chip-warn';
-      const title = known ? '' : ` title="Entity not found"`;
-      return `<span class="${cls}"${title}>${c}<button class="chip-rm" data-cover="${c}">✕</button></span>`;
+      const friendlyName = states[c]?.attributes?.friendly_name;
+      const tooltipParts = known
+        ? [friendlyName, c].filter(Boolean)
+        : ['Entity not found', c];
+      const label = c.startsWith('cover.') ? c.slice('cover.'.length) : c;
+      return `<span class="${cls}" title="${tooltipParts.join('\n')}"><span class="chip-label">${label}</span><button class="chip-rm" data-cover="${c}">✕</button></span>`;
     }).join('');
     return `<div class="cover-picker" data-covers='${JSON.stringify(covers || [])}'>
       <div class="chips">${chips}</div>
@@ -702,6 +754,19 @@ class SmartShadesPanel extends HTMLElement {
     this._render();
   }
 
+  _moveGroup(gIdx, dir) {
+    this._collect();
+    const groups = this._groups;
+    const mode = groups[gIdx].mode;
+    const modeIdxs = groups.map((g, i) => g.mode === mode ? i : -1).filter(i => i >= 0);
+    const pos = modeIdxs.indexOf(gIdx);
+    if (pos + dir < 0 || pos + dir >= modeIdxs.length) return;
+    const swapIdx = modeIdxs[pos + dir];
+    [groups[gIdx], groups[swapIdx]] = [groups[swapIdx], groups[gIdx]];
+    this._dirty = true;
+    this._render();
+  }
+
   async _save() {
     if (this._saving) return;
     this._collect();
@@ -752,6 +817,26 @@ class SmartShadesPanel extends HTMLElement {
       return;
     }
 
+    const posBarHtml = (val) => {
+      const v = (val != null && val !== '') ? parseInt(val, 10) : null;
+      const fill = v != null ? (100 - v) : 0;
+      const opacity = v == null ? ' opacity:.12;' : '';
+      return `<div class="pos-bar-track" style="${opacity}"><div class="pos-bar-fill" style="height:${fill}%"></div></div>`;
+    };
+    const tiltBarHtml = (val) => {
+      const v = (val != null && val !== '') ? parseInt(val, 10) : null;
+      const deg = v != null ? ((100 - v) * 0.72) : 36;
+      const opacity = v == null ? 'opacity:.12;' : '';
+      return `<div class="tilt-bar-wrap" style="${opacity}">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" overflow="visible">
+          <path d="M 4 4 Q 12 2 20 4" stroke="var(--secondary-text-color)" stroke-width="2" stroke-linecap="round"
+                style="transform-origin:12px 4px;transform:rotate(${deg}deg)"/>
+          <path d="M 4 18 Q 12 16 20 18" stroke="var(--secondary-text-color)" stroke-width="2" stroke-linecap="round"
+                style="transform-origin:12px 18px;transform:rotate(${deg}deg)"/>
+        </svg>
+      </div>`;
+    };
+
     const curMode   = this._cfg.current_mode;
     const overrides = new Set(this._cfg.overrides || []);
 
@@ -781,85 +866,81 @@ class SmartShadesPanel extends HTMLElement {
     }).join('');
 
     const sectionsHtml = this._modes.map(mode => {
-      // Build mode tables containing multiple groups
+      const modeGroupIdxs = this._groups.map((g, i) => g.mode === mode ? i : -1).filter(i => i >= 0);
       const groupsHtml = this._groups.map((group, gIdx) => {
         if (group.mode !== mode) return '';
-        
+
+        const posInMode = modeGroupIdxs.indexOf(gIdx);
+        const isFirstInMode = posInMode === 0;
+        const isLastInMode  = posInMode === modeGroupIdxs.length - 1;
         const hasGroupOv = (group.covers || []).some(c => overrides.has(c));
         const rules = group.rules || [];
-        const rowspan = rules.length + 1; // +1 for the Add Action row
+        const rowspan = rules.length + 1;
+
+        const coversCellHtml = `
+          <td rowspan="${rowspan}" class="covers-cell">
+            <div class="covers-cell-inner">
+              <div class="covers-content">
+                ${this._coverPickerHtml(group.covers)}
+                ${hasGroupOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
+              </div>
+              <div class="group-btns">
+                <button class="icon-btn up-group-btn" data-gidx="${gIdx}" ${isFirstInMode ? 'disabled' : ''} title="Move group up">▲</button>
+                <button class="icon-btn dn-group-btn" data-gidx="${gIdx}" ${isLastInMode  ? 'disabled' : ''} title="Move group down">▼</button>
+                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete group">✕</button>
+              </div>
+            </div>
+          </td>`;
 
         let rowsHtml = '';
-
         for (let rIdx = 0; rIdx < rules.length; rIdx++) {
           const r = rules[rIdx];
           const hasContent = (r.conditions && r.conditions.length > 0) || r.action?.position != null || r.action?.tilt != null;
           const isInvalid = hasContent && r.action?.position == null && r.action?.tilt == null;
-          const rowClass = isInvalid ? 'row-invalid' : '';
           const condStr = formatCondition(r.conditions);
 
-          const isFirst = rIdx === 0;
-          const coversTd = isFirst ? `
-            <td rowspan="${rowspan}" class="covers-cell">
-              <div style="display:flex; flex-direction:column; height:100%; gap:8px">
-                <div>
-                  ${this._coverPickerHtml(group.covers)}
-                  ${hasGroupOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
-                </div>
-                <div style="flex:1"></div>
-                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete Group" style="align-self:flex-start">✕ Delete Group</button>
-              </div>
-            </td>
-          ` : '';
-
           rowsHtml += `
-            <tr class="rule-row ${rowClass}" data-gidx="${gIdx}" data-ridx="${rIdx}">
-              ${coversTd}
-              <td>
-                <div class="row-btns" style="flex-direction:column;gap:0">
-                  <button class="icon-btn up-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
-                    ${rIdx === 0 ? 'disabled' : ''} title="Move up">▲</button>
-                  <button class="icon-btn dn-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
-                    ${rIdx === rules.length - 1 ? 'disabled' : ''} title="Move down">▼</button>
-                </div>
-              </td>
+            <tr class="rule-row${isInvalid ? ' row-invalid' : ''}" data-gidx="${gIdx}" data-ridx="${rIdx}">
+              ${rIdx === 0 ? coversCellHtml : ''}
               <td>
                 <div class="cond-wrap">
                   <input class="f-cond" value="${condStr}" placeholder="-" />
                   <span class="cond-badge ${validateCondition(condStr).ok ? '' : 'error'}">${condStr && !validateCondition(condStr).ok ? '✗' : ''}</span>
                 </div>
               </td>
-              <td><input class="f-pos narrow" type="number" min="0" max="100"
-                value="${r.action?.position ?? ''}" placeholder="—" /></td>
-              <td><input class="f-tilt narrow" type="number" min="0" max="100"
-                value="${r.action?.tilt ?? ''}" placeholder="—" /></td>
+              <td class="pt-cell">
+                <div class="pt-row">
+                  <input class="f-pos narrow" type="number" min="0" max="100" inputmode="numeric"
+                    value="${r.action?.position ?? ''}" placeholder="—" />
+                  ${posBarHtml(r.action?.position)}
+                </div>
+              </td>
+              <td class="pt-cell">
+                <div class="pt-row">
+                  ${tiltBarHtml(r.action?.tilt)}
+                  <input class="f-tilt narrow" type="number" min="0" max="100" inputmode="numeric"
+                    value="${r.action?.tilt ?? ''}" placeholder="—" />
+                </div>
+              </td>
               <td>
-                <div class="row-btns" style="justify-content:flex-end">
-                  <button class="icon-btn del del-rule-btn" data-gidx="${gIdx}" data-ridx="${rIdx}" title="Delete">✕</button>
+                <div class="row-btns">
+                  <button class="icon-btn up-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
+                    ${rIdx === 0 ? 'disabled' : ''} title="Move rule up">▲</button>
+                  <button class="icon-btn dn-btn" data-gidx="${gIdx}" data-ridx="${rIdx}"
+                    ${rIdx === rules.length - 1 ? 'disabled' : ''} title="Move rule down">▼</button>
+                  <button class="icon-btn del del-rule-btn" data-gidx="${gIdx}" data-ridx="${rIdx}" title="Delete rule">✕</button>
                 </div>
               </td>
             </tr>`;
         }
 
-        const addRowCoversTd = rules.length === 0 ? `
-            <td rowspan="${rowspan}" class="covers-cell">
-              <div style="display:flex; flex-direction:column; height:100%; gap:8px">
-                <div>
-                  ${this._coverPickerHtml(group.covers)}
-                  ${hasGroupOv ? '<span class="override-icon" title="Manual override active">⚠</span>' : ''}
-                </div>
-                <div style="flex:1"></div>
-                <button class="icon-btn del del-group-btn" data-gidx="${gIdx}" title="Delete Group" style="align-self:flex-start">✕ Delete Group</button>
-              </div>
-            </td>
-        ` : '';
-
+        const emptyCovers = rules.length === 0 ? coversCellHtml : '';
         return `
           <tbody class="cover-group" data-mode="${mode}" data-gidx="${gIdx}">
             ${rowsHtml}
             <tr class="add-row">
-              ${addRowCoversTd}
-              <td colspan="5">
+              ${emptyCovers}
+              <td colspan="4">
                 <button class="add-rule-btn" data-gidx="${gIdx}">＋ Add Action</button>
               </td>
             </tr>
@@ -880,23 +961,23 @@ class SmartShadesPanel extends HTMLElement {
             Force on switch</label>
         </div>`;
 
+      const isCollapsed = this._collapsedModes.has(mode);
       return `
-        <div class="mode-section" id="mode-sec-${mode}" data-mode="${mode}">
-          <div class="section-heading${isSpecial ? ' section-special' : ''}">
-            ${MODE_LABELS[mode] || mode}
-            ${this._orphaned.has(mode) ? ' <span class="orphan-warn">⚠ not in input_select</span>' : ''}
+        <div class="mode-section${isCollapsed ? ' collapsed' : ''}" id="mode-sec-${mode}" data-mode="${mode}">
+          <div class="section-heading${isSpecial ? ' section-special' : ''}" data-mode="${mode}">
+            <span>${MODE_LABELS[mode] || mode}${this._orphaned.has(mode) ? ' <span class="orphan-warn">⚠ not in input_select</span>' : ''}</span>
+            <button class="collapse-btn" data-mode="${mode}" title="${isCollapsed ? 'Expand section' : 'Collapse section'}">${isCollapsed ? '▶' : '▼'}</button>
           </div>
           ${modeOptsHtml}
           <div class="table-card">
             <table>
               <thead>
                 <tr>
-                  <th style="width: 30%">Covers</th>
-                  <th style="width: 46px"></th>
-                  <th style="width: 40%">Condition</th>
-                  <th style="width: 15%">Pos%</th>
-                  <th style="width: 15%">Tilt%</th>
-                  <th style="width: 64px"></th>
+                  <th style="width:340px">Covers</th>
+                  <th>Condition</th>
+                  <th style="width:88px;text-align:center">Pos</th>
+                  <th style="width:88px;text-align:center">Tilt</th>
+                  <th style="width:96px"></th>
                 </tr>
               </thead>
               ${groupsHtml}
@@ -1013,11 +1094,17 @@ class SmartShadesPanel extends HTMLElement {
 
     root.querySelectorAll('.mode-tab[data-mode]').forEach(btn =>
       btn.addEventListener('click', () => {
-        this._mode = btn.dataset.mode;
-        root.querySelectorAll('.mode-tab').forEach(t =>
-          t.classList.toggle('active', t.dataset.mode === this._mode)
-        );
-        root.querySelector(`#mode-sec-${this._mode}`)
+        const m = btn.dataset.mode;
+        this._mode = m;
+        for (const mode of this._modes) {
+          if (mode !== '_priority' && mode !== '_fallback' && mode !== m) {
+            this._collapsedModes.add(mode);
+          } else {
+            this._collapsedModes.delete(mode);
+          }
+        }
+        this._render();
+        this.shadowRoot.querySelector(`#mode-sec-${m}`)
           ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       })
     );
@@ -1033,6 +1120,36 @@ class SmartShadesPanel extends HTMLElement {
       }
     }, { threshold: 0.25 });
     root.querySelectorAll('.mode-section').forEach(s => io.observe(s));
+
+    root.querySelectorAll('.collapse-btn').forEach(btn =>
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const m = btn.dataset.mode;
+        if (this._collapsedModes.has(m)) {
+          this._collapsedModes.delete(m);
+        } else {
+          this._collapsedModes.add(m);
+        }
+        this._render();
+      })
+    );
+    root.querySelectorAll('.section-heading[data-mode]').forEach(el =>
+      el.addEventListener('click', () => {
+        const m = el.dataset.mode;
+        if (this._collapsedModes.has(m)) {
+          this._collapsedModes.delete(m);
+        } else {
+          this._collapsedModes.add(m);
+        }
+        this._render();
+      })
+    );
+    root.querySelectorAll('.up-group-btn').forEach(btn =>
+      btn.addEventListener('click', () => this._moveGroup(+btn.dataset.gidx, -1))
+    );
+    root.querySelectorAll('.dn-group-btn').forEach(btn =>
+      btn.addEventListener('click', () => this._moveGroup(+btn.dataset.gidx, +1))
+    );
 
     root.querySelector('#save-btn').addEventListener('click', () => this._save());
 
@@ -1135,8 +1252,42 @@ class SmartShadesPanel extends HTMLElement {
       inp.addEventListener('input', update);
     });
 
-    root.querySelectorAll('.f-pos, .f-tilt').forEach(inp =>
-      inp.addEventListener('input', markDirty)
+    const ALLOWED_KEYS = new Set(['Backspace','Delete','Tab','ArrowLeft','ArrowRight','Home','End']);
+    root.querySelectorAll('.f-pos, .f-tilt').forEach(inp => {
+      inp.addEventListener('keydown', e => {
+        if (!/^\d$/.test(e.key) && !ALLOWED_KEYS.has(e.key) && !e.ctrlKey && !e.metaKey)
+          e.preventDefault();
+      });
+      inp.addEventListener('blur', () => {
+        if (inp.value === '') return;
+        const v = parseInt(inp.value, 10);
+        inp.value = isNaN(v) ? '' : Math.min(100, Math.max(0, v));
+        inp.dispatchEvent(new Event('input'));
+      });
+    });
+
+    root.querySelectorAll('.f-pos').forEach(inp =>
+      inp.addEventListener('input', () => {
+        markDirty();
+        const track = inp.nextElementSibling;
+        if (!track?.classList.contains('pos-bar-track')) return;
+        const v = parseInt(inp.value, 10);
+        const valid = !isNaN(v) && v >= 0 && v <= 100;
+        track.style.opacity = valid ? '' : '0.12';
+        track.querySelector('.pos-bar-fill').style.height = valid ? (100 - v) + '%' : '0%';
+      })
+    );
+    root.querySelectorAll('.f-tilt').forEach(inp =>
+      inp.addEventListener('input', () => {
+        markDirty();
+        const wrap = inp.previousElementSibling;
+        if (!wrap?.classList.contains('tilt-bar-wrap')) return;
+        const v = parseInt(inp.value, 10);
+        const valid = !isNaN(v) && v >= 0 && v <= 100;
+        wrap.style.opacity = valid ? '' : '0.12';
+        const deg = valid ? (100 - v) * 0.72 : 36;
+        wrap.querySelectorAll('path').forEach(p => p.style.transform = `rotate(${deg}deg)`);
+      })
     );
 
     root.querySelector('#helpers-link')?.addEventListener('click', e => {
