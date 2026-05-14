@@ -1,5 +1,7 @@
 # Smart Shade Scheduler
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 A Home Assistant custom integration for rule-based, sun- and time-aware automation of blinds, shutters and awnings — with intelligent manual-override detection and a full sidebar UI.
 
 ---
@@ -198,3 +200,9 @@ An automation sets this entity based on weather forecast, time of day, or manual
 ### Backlog
 - **Simulator** — a panel view that lets you scrub through a day (time, sun azimuth/elevation, month) and see in real time which rules would fire and what position/tilt each cover would end up at. Useful for validating rules before deploying them.
 - **Jinja2 templates for position/tilt** — accept a template string (e.g. `{{ 50 if az > 200 else 100 }}`), enabling continuous adjustment instead of discrete breakpoints.
+
+---
+
+## License
+
+GPL-3.0-only — see [LICENSE](LICENSE).
