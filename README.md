@@ -97,9 +97,6 @@ If a mode is removed from the input_select but still has rules, its tab is kept 
 ### Armed sensor
 An optional `binary_sensor` controls whether automation runs. When the sensor is `on`, automation is armed. When `off`, all evaluation is skipped. If no sensor is configured, automation always runs.
 
-### Daily override reset
-All manual overrides are wiped at a configurable time each day (default 04:00) so every day starts clean.
-
 ### Real-time sensor
 A sensor (`sensor.smart_shade_scheduler`) exposes:
 - **State**: current mode name
@@ -114,7 +111,11 @@ Immediately lifts manual override flags so automation resumes.
 | `entity_id` *(optional)* | Specific cover to clear. Omit to clear all. |
 
 ### Import / Export / LLM prompt
-The hamburger menu (☰) in the top-right of the panel provides JSON export and import of all rules, plus a **Generate LLM Prompt** button that copies a full system description and current rule set to the clipboard — ready to paste into any AI assistant for rule authoring help.
+The hamburger menu (☰) in the top-right of the panel provides:
+- **Custom Variables** — bind short names to HA entities or templates
+- **Generate LLM Prompt** — copies a full system description and current rule set to the clipboard, ready to paste into any AI assistant
+- **Export / Import** — JSON backup and restore of all rules
+- **Integration Settings** — jump directly to the HA integrations config page
 
 ### JSON-based rule storage
 Rules are stored in HA's config entry options (`.storage/core.config_entries`). Included in HA backups, exportable as JSON, and versionable with git.
@@ -162,7 +163,7 @@ At least one of position or tilt must be set for a row to be active.
 | Setting | Default | Description |
 |---|---|---|
 | Position tolerance | 5 % | A cover is only moved if it deviates more than this from the target |
-| Override duration | 2 s | How long a manual move suppresses automation |
+| Override duration | 120 min | How long a manual move suppresses automation |
 | Tilt delay | 30 s | Seconds between position and tilt commands |
 
 ---

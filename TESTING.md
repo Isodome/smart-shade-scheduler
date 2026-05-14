@@ -2,7 +2,7 @@
 
 ## Python unit tests
 
-Tests cover `rule_matches`, `evaluate_rules`, `is_dnd_active`, and `normalize_groups` — no Home Assistant installation required.
+Tests cover `rule_matches`, `evaluate_rules`, and `normalize_groups` — no Home Assistant installation required.
 
 ```bash
 python3 -m venv .venv
