@@ -58,12 +58,14 @@ Rules are stored in the HA config entry options as a flat list of groups:
 {
   "mode": "_priority" | "_fallback" | "<mode_name>",
   "covers": ["cover.entity_id", ...],
-  "conditions": [{"var": "azimuth|elevation|time|month|day|<custom>", "op": ">|<|>=|<=|==", "val": 150}],
-  "action": {"position": 0-100, "tilt": 0-100}
+  "rules": [
+    {
+      "conditions": [{"var": "azimuth|elevation|time|month|day|<custom>", "op": ">|<|>=|<=|==", "val": 150}],
+      "action": {"position": 0-100, "tilt": 0-100}
+    }
+  ]
 }
 ```
-
-`normalize_groups()` in `logic.py` handles migration from the old nested `{rules:[...]}` format — it is idempotent and must stay that way.
 
 ### Three-pass evaluation (`evaluate_rules` in `logic.py`)
 
