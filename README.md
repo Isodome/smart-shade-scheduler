@@ -196,6 +196,8 @@ An automation sets this entity based on weather forecast, time of day, or manual
 ### Planned
 - **Temporary-position service** — set a cover position/tilt that holds only until the next rule evaluation, without triggering the manual-override timer. Useful for one-off adjustments that should self-correct.
 - **One-shot rule flag** — mark a rule as "fire once per day". After it fires for a cover, the cover is left alone until the daily reset, even if conditions remain true. Useful for morning-open rules that should not re-enforce after a manual adjustment.
+- **Discount tilt delay based on travel distance** (e.g. if moving 50% distance, wait only 50% of the configured delay)
+
 
 ### Backlog
 - **Simulator** — a panel view that lets you scrub through a day (time, sun azimuth/elevation, month) and see in real time which rules would fire and what position/tilt each cover would end up at. Useful for validating rules before deploying them.

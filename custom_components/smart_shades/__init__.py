@@ -493,7 +493,6 @@ class ShadeManager:
             target_pos = target["p"]
             target_tilt = target["t"]
 
-            # ── Divergence check: cover moved since our last command? ──────
             last = self._last_commanded.get(entity_id, {})
             last_pos = last.get("p")
             last_tilt = last.get("t")
@@ -501,8 +500,6 @@ class ShadeManager:
             # ── Active override: check if it should be cleared ──────────────
             if entity_id in self._overrides:
                 age = now - self._overrides[entity_id]
-                # If current state is unknown, we can't reliably detect if it reached target,
-                # so we treat it as 'ok' to allow the override to expire naturally or be cleared.
                 pos_ok = (
                     target_pos is None
                     or cur_pos is None
@@ -527,51 +524,53 @@ class ShadeManager:
                     continue
 
             # ── Divergence check: cover moved since our last command? ──────
+            is_in_grace = False
             if last:
                 cmd_age = (now - last["ts"]).total_seconds()
                 if cmd_age < self._TRANSIT_GRACE:
-                    # Still in transit — re-send position only if we KNOW it's wrong.
-                    # If cur_pos is None, we stay quiet and wait.
-                    needs_pos = target_pos is not None and cur_pos is not None and abs(int(cur_pos) - target_pos) > tolerance
-                    if needs_pos:
-                        self._last_commanded[entity_id] = {"p": target_pos, "t": target_tilt, "ts": dt_util.now()}
-                        pos_cmds[entity_id] = target_pos
-                    else:
-                        self._last_commanded[entity_id]["p"] = target_pos
-                        self._last_commanded[entity_id]["t"] = target_tilt
-                    continue
-
-                pos_moved = (
-                    last_pos is not None
-                    and cur_pos is not None
-                    and abs(int(cur_pos) - last_pos) > tolerance
-                )
-                tilt_moved = (
-                    last_tilt is not None
-                    and cur_tilt is not None
-                    and abs(int(cur_tilt) - last_tilt) > tolerance
-                )
-                if pos_moved or tilt_moved:
-                    _LOGGER.info(
-                        "Manual override detected for %s "
-                        "(expected pos=%s/tilt=%s, actual pos=%s/tilt=%s)",
-                        entity_id, last_pos, last_tilt, cur_pos, cur_tilt,
+                    is_in_grace = True
+                else:
+                    pos_moved = (
+                        last_pos is not None
+                        and cur_pos is not None
+                        and abs(int(cur_pos) - last_pos) > tolerance
                     )
-                    self._overrides[entity_id] = now
-                    continue
+                    tilt_moved = (
+                        last_tilt is not None
+                        and cur_tilt is not None
+                        and abs(int(cur_tilt) - last_tilt) > tolerance
+                    )
+                    if pos_moved or tilt_moved:
+                        _LOGGER.info(
+                            "Manual override detected for %s "
+                            "(expected pos=%s/tilt=%s, actual pos=%s/tilt=%s)",
+                            entity_id, last_pos, last_tilt, cur_pos, cur_tilt,
+                        )
+                        self._overrides[entity_id] = now
+                        continue
 
             # ── Determine if we need to send commands ───────────────────────
             
-            # Use current state if available, otherwise fall back to our last commanded state
-            # (assumed position) to decide if a move is needed.
+            # Use current state if available, otherwise fall back to our last commanded state.
             eff_pos = cur_pos if cur_pos is not None else last_pos
             eff_tilt = cur_tilt if cur_tilt is not None else last_tilt
 
+            # We need to move if:
+            # 1. Target is different from effective state.
+            # 2. AND we are NOT in transit grace, OR the target itself has changed since our last command.
+            
+            target_pos_changed = target_pos is not None and last_pos is not None and abs(int(last_pos) - target_pos) > tolerance
+            target_tilt_changed = target_tilt is not None and last_tilt is not None and abs(int(last_tilt) - target_tilt) > tolerance
+
             needs_pos = target_pos is not None and (
-                eff_pos is None or abs(int(eff_pos) - target_pos) > tolerance
+                eff_pos is None 
+                or abs(int(eff_pos) - target_pos) > tolerance 
+                or (is_in_grace and target_pos_changed)
             )
             needs_tilt = target_tilt is not None and (
-                eff_tilt is None or abs(int(eff_tilt) - target_tilt) > tolerance
+                eff_tilt is None 
+                or abs(int(eff_tilt) - target_tilt) > tolerance
+                or (is_in_grace and target_tilt_changed)
             )
 
             needs_move = needs_pos or needs_tilt
@@ -590,16 +589,17 @@ class ShadeManager:
         for entity_id, pos in pos_cmds.items():
             await self._send_pos(entity_id, pos)
 
-        # Send tilt commands: delayed via background task if positions were also
-        # sent (device needs to finish moving first), otherwise immediately.
+        # Send tilt commands
         if tilt_cmds:
+            # Add delay to allow position command to complete before tilting
             delay = self._tilt_delay()
             for entity_id, tilt in tilt_cmds.items():
                 # Cancel any existing pending tilt for this cover
                 if entity_id in self._tilt_tasks:
                     self._tilt_tasks[entity_id].cancel()
 
-                if pos_cmds:
+                # Delay tilt only if THIS cover is also moving position
+                if entity_id in pos_cmds:
                     async def _delayed_tilt(eid=entity_id, t=tilt):
                         try:
                             await asyncio.sleep(delay)

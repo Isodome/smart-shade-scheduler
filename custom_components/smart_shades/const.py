@@ -42,8 +42,8 @@ BUILT_IN_VARS = [
     {"short": "d",  "long": "day",       "type": "number", "resolver": _now_weekday},
 ]
 CONF_CUSTOM_VARS     = "custom_vars"     # str: multiline "name=entity_id" or "name={{template}}"
-CONF_TILT_DELAY      = "tilt_delay"     # seconds to wait between position and tilt commands
-DEFAULT_TILT_DELAY   = 30
+CONF_TILT_DELAY      = "tilt_delay"      # seconds to wait between position and tilt commands
+DEFAULT_TILT_DELAY   = 60               # Typical vertical shades take ~60s to close before tilt is reliable
 
 # Reserved mode keys — always present, never orphaned
 PRIORITY_MODE = "_priority"
