@@ -58,3 +58,4 @@ CONF_OVERRIDE_DURATION = "override_duration"   # minutes, stored in options
 DEFAULT_OVERRIDE_DURATION = 120                # minutes (2 hours)
 DEFAULT_TRANSIT_GRACE     = 90                 # seconds
 SCAN_INTERVAL_MINUTES = 15
+EVALUATION_LOW_PRIO_COOLDOWN = 240             # seconds (4 minutes)

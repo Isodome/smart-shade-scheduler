@@ -34,6 +34,7 @@ from .const import (
     FALLBACK_MODE,
     PRIORITY_MODE,
     SCAN_INTERVAL_MINUTES,
+    EVALUATION_LOW_PRIO_COOLDOWN,
 )
 
 
@@ -124,7 +125,8 @@ async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
     return True
 
 
-async def _async_options_updated(hass: HomeAssistant, entry) -> None:
+@callback
+def _async_options_updated(hass: HomeAssistant, entry) -> None:
     """Re-init listeners and immediately apply the new rules."""
     manager: ShadeManager | None = hass.data[DOMAIN].get(entry.entry_id)
     if manager:
@@ -134,7 +136,7 @@ async def _async_options_updated(hass: HomeAssistant, entry) -> None:
         )
         manager.reinit_mode_listener()
         manager.reinit_armed_listener()
-        await manager.async_evaluate_rules()
+        manager.async_schedule_evaluation(high_priority=True)
 
 
 # ---------------------------------------------------------------------------
@@ -146,10 +148,14 @@ class ShadeManager:
         self.hass = hass
         self.entry = entry
 
-        # entity_id → datetime when override started
+        self._last_commanded: dict[str, dict] = {}       # entity_id → {p, t, ts}
         self._overrides: dict[str, datetime] = {}
-        # entity_id → {"p": position, "t": tilt, "ts": datetime} of our last command
-        self._last_commanded: dict[str, dict] = {}
+        
+        # Debouncing / Rate-limiting state
+        self._last_low_prio_eval: datetime | None = None
+        self._eval_task: asyncio.Task | None = None
+        self._needs_reeval = False
+        self._next_eval_is_high_prio = False
 
         # Seconds after a command during which divergence checks are suppressed
         # (cover may still be travelling to its commanded position)
@@ -164,7 +170,6 @@ class ShadeManager:
         self._unsub: list = []
         self._mode_unsub = None
         self._armed_unsub = None
-        self._eval_lock = asyncio.Lock()
         self._listeners: list = []
 
     # ------------------------------------------------------------------
@@ -271,8 +276,9 @@ class ShadeManager:
     # Event handlers
     # ------------------------------------------------------------------
 
-    async def _on_ha_started(self, _event) -> None:
-        await self.async_evaluate_rules()
+    @callback
+    def _on_ha_started(self, _event) -> None:
+        self.async_schedule_evaluation(high_priority=True)
 
     def _managed_covers_for_mode(self, mode: str) -> set[str]:
         """Return covers that will be evaluated (and potentially moved) in this mode."""
@@ -293,32 +299,72 @@ class ShadeManager:
         new_state = event.data.get("new_state")
         new_mode = new_state.state if new_state else None
         if new_mode:
-            mode_cfg = self.entry.options.get(CONF_MODE_CONFIG, {})
-            if mode_cfg.get(new_mode, {}).get("force"):
+            config = self._opt(CONF_MODE_CONFIG, {})
+            mode_cfg = config.get(new_mode, {})
+            if mode_cfg.get("force"):
                 covers = self._managed_covers_for_mode(new_mode)
                 cleared = [e for e in list(self._overrides) if e in covers]
                 for entity_id in cleared:
                     self._overrides.pop(entity_id)
                     self._last_commanded.pop(entity_id, None)
-                _LOGGER.info(
-                    "Force mode '%s': cleared overrides for %s", new_mode, cleared
-                )
-                self._notify()
-        self.hass.async_create_task(self.async_evaluate_rules())
+                if cleared:
+                    _LOGGER.info(
+                        "Force mode '%s': cleared overrides for %s", new_mode, cleared
+                    )
+                    self._notify()
+        self.async_schedule_evaluation(high_priority=True)
 
     @callback
     def _on_armed_change(self, event) -> None:
         new_state = event.data.get("new_state")
         if new_state and new_state.state == "on":
-            self.hass.async_create_task(self.async_evaluate_rules())
+            self.async_schedule_evaluation(high_priority=True)
 
     @callback
     def _on_sun_change(self, _event) -> None:
-        self.hass.async_create_task(self.async_evaluate_rules())
+        self.async_schedule_evaluation(high_priority=False)
 
     @callback
     def _on_interval(self, _now) -> None:
-        self.hass.async_create_task(self.async_evaluate_rules())
+        self.async_schedule_evaluation(high_priority=False)
+
+    @callback
+    def async_schedule_evaluation(self, high_priority: bool = False) -> None:
+        """Schedule an evaluation cycle, debouncing and rate-limiting."""
+        if high_priority:
+            self._next_eval_is_high_prio = True
+
+        if not high_priority:
+            now = dt_util.now()
+            last = self._last_low_prio_eval
+            if last and (now - last).total_seconds() < EVALUATION_LOW_PRIO_COOLDOWN:
+                return
+
+        if self._eval_task and not self._eval_task.done():
+            self._needs_reeval = True
+            return
+
+        self._eval_task = self.hass.async_create_task(self._async_eval_loop())
+
+    async def _async_eval_loop(self) -> None:
+        """Core evaluation loop ensuring trailing-edge catches."""
+        try:
+            while True:
+                current_high_prio = self._next_eval_is_high_prio
+                self._needs_reeval = False
+                self._next_eval_is_high_prio = False
+
+                if not current_high_prio:
+                    self._last_low_prio_eval = dt_util.now()
+
+                await self._do_evaluate()
+
+                if not self._needs_reeval:
+                    break
+                # Small breather between back-to-back evaluations
+                await asyncio.sleep(1)
+        finally:
+            self._eval_task = None
 
     # ------------------------------------------------------------------
     # Core logic
@@ -397,11 +443,6 @@ class ShadeManager:
         if self._custom_resolvers is None:
             self._custom_resolvers = self._build_custom_resolvers()
         return self._custom_resolvers
-
-    async def async_evaluate_rules(self) -> None:
-        """Evaluate rules, moving covers as needed. Skips overridden covers."""
-        async with self._eval_lock:
-            await self._do_evaluate()
 
     # Delegate to logic.py (pure, unit-testable)
     _rule_matches  = staticmethod(rule_matches)
