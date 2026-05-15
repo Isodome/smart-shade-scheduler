@@ -24,7 +24,7 @@ For each human-annotated task in the `todo.md` list, the following execution loo
    - Save the current `git diff` to `audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch`.
    - Present the diff to peer models for review. The prompt MUST point to the original audit report finding, explicitly ask whether it is properly addressed, and **include a link to these [process_instructions.md](file:///home/dominic/dev/shade_scheduler/audits/process_instructions.md)** so the peer model knows the rules of the review.
    - Save each review response to `audits/<YYYY-MM-DD>/tasks/<task_slug>/rev<N>.md` (e.g., `rev1.md`, `rev2.md`).
-4. **Incorporate Feedback & Re-Review:** The implementing model incorporates the peer review feedback and refines the code. If any changes are made, update `diff.patch` and perform another peer review round (saving to `rev2.md`, etc.) until consensus is reached.
+4. **Incorporate Feedback & Re-Review:** The implementing model critically assess and if necessary incorporates the peer review feedback and refines the code. If any changes are made, update `diff.patch` and perform another peer review round (saving to `rev2.md`, etc.) until consensus is reached.
 5. **Resolve Disputes:** If the models disagree on the implementation details or feedback, the implementing model pauses and asks the human to make the final architectural decision.
 6. **Commit & Track:** Once consensus (or a human override) is reached, the implementing model performs a git commit for the fix and marks the corresponding item as "Done" (`[x]`) in the `todo.md` list.
 
@@ -36,7 +36,9 @@ git diff origin/main...HEAD > audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch
 
 # 2. Define prompt (shared)
 PROMPT="Review this diff. It addresses finding [FINDING_NAME] from audits/<YYYY-MM-DD>/<agent>_audit_report.md. \
-Process rules: file:///home/dominic/dev/shade_scheduler/audits/process_instructions.md. \
+Follow the process defined in file:///home/dominic/dev/shade_scheduler/audits/process_instructions.md. \
+Your output will be piped directly to audits/<YYYY-MM-DD>/tasks/<task_slug>/rev<N>.md as the review file — \
+output only your review response, nothing else. \
 Is the finding properly addressed? Any bugs, security issues, or code quality concerns?"
 
 # 3. Run review — pick one CLI:
@@ -45,7 +47,8 @@ Is the finding properly addressed? Any bugs, security issues, or code quality co
 gemini -p "$PROMPT" < audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch \
   > audits/<YYYY-MM-DD>/tasks/<task_slug>/rev<N>.md
 
-# Claude
-claude -p "$PROMPT" < audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch \
+# Claude (--allowedTools grants read access to repo files for context without interactive prompts)
+claude --allowedTools "Read,Glob,Grep" \
+  -p "$PROMPT" < audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch \
   > audits/<YYYY-MM-DD>/tasks/<task_slug>/rev<N>.md
 ```

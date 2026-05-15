@@ -191,6 +191,7 @@ An automation sets this entity based on weather forecast, time of day, or manual
 - **Tilt position doesn't work** — sometimes gets stuck and fails to update.
 - **Overrides are broken** — manual override detection not functioning as expected.
 - **Validation checkmark is inconsistent** — UI validation state doesn't always reflect current rules correctly.
+- In the mobile app, the panel hides the apps own controls and is full screen.
 
 ### Planned
 - **Temporary-position service** — set a cover position/tilt that holds only until the next rule evaluation, without triggering the manual-override timer. Useful for one-off adjustments that should self-correct.

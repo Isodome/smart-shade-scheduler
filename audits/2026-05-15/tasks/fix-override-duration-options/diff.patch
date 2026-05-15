@@ -1,0 +1,50 @@
+diff --git a/custom_components/smart_shades/__init__.py b/custom_components/smart_shades/__init__.py
+index cef00d9..5250efa 100644
+--- a/custom_components/smart_shades/__init__.py
++++ b/custom_components/smart_shades/__init__.py
+@@ -343,14 +343,15 @@ class ShadeManager:
+ 
+     @property
+     def override_duration(self) -> timedelta:
+-        # Entity-based override takes priority (backwards compat)
+-        entity = self.entry.data.get(CONF_OVERRIDE_DURATION_ENTITY)
++        # Entity-based override takes priority (backwards compat via _opt)
++        entity = self._opt(CONF_OVERRIDE_DURATION_ENTITY, None)
+         if entity:
+             state = self.hass.states.get(entity)
+-            if state:
++            if state and state.state not in ("unknown", "unavailable"):
+                 try:
+-                    return timedelta(hours=float(state.state))
+-                except ValueError:
++                    # The user explicitly requested minutes for this entity
++                    return timedelta(minutes=float(state.state))
++                except (ValueError, TypeError):
+                     pass
+         minutes = int(self._opt(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION))
+         return timedelta(minutes=minutes)
+diff --git a/custom_components/smart_shades/config_flow.py b/custom_components/smart_shades/config_flow.py
+index 07e8cd2..380eb05 100644
+--- a/custom_components/smart_shades/config_flow.py
++++ b/custom_components/smart_shades/config_flow.py
+@@ -65,6 +65,12 @@ def _settings_schema(opts: dict) -> vol.Schema:
+             ): selector.EntitySelector(
+                 selector.EntitySelectorConfig(domain="binary_sensor")
+             ),
++            vol.Optional(
++                CONF_OVERRIDE_DURATION_ENTITY,
++                description={"suggested_value": opts.get(CONF_OVERRIDE_DURATION_ENTITY)},
++            ): selector.EntitySelector(
++                selector.EntitySelectorConfig(domain="input_number")
++            ),
+         }
+     )
+ 
+@@ -153,6 +159,7 @@ class SmartShadesOptionsFlow(config_entries.OptionsFlow):
+                     CONF_TILT_DELAY: int(user_input[CONF_TILT_DELAY]),
+                     CONF_TRANSIT_GRACE: int(user_input[CONF_TRANSIT_GRACE]),
+                     CONF_ARMED_ENTITY: user_input.get(CONF_ARMED_ENTITY) or None,
++                    CONF_OVERRIDE_DURATION_ENTITY: user_input.get(CONF_OVERRIDE_DURATION_ENTITY) or None,
+                 },
+             )
+         merged = {**self.config_entry.data, **self.config_entry.options}

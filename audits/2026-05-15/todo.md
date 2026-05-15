@@ -3,17 +3,17 @@
 ## 1. Both Agree (To Do)
 
 - **Fix `_delayed_tilts` task management** (prevents stale tilt commands and leaks on unload)
-  - [ ] Work on this
-  - [ ] Done
+  - [x] Work on this
+  - [x] Done
 
 
 - **Add dynamic event tracking for `CONF_CUSTOM_VARS`** (fixes unresponsive custom sensors)
   - [ ] Work on this
   - [ ] Done
 
-- **Fix "Blind" covers bug** (add fallback for covers lacking `current_position` so commands aren't silently dropped)
-  - [ ] Work on this
-  - [ ] Done
+- **Fix "Blind" covers bug** (add fallback for covers lacking `current_position` or `current_tilt_position` so commands aren't silently dropped)
+  - [x] Work on this
+  - [x] Done
 
 - **Test coverage reports** (setup pytest-cov and generate reports)
   - [ ] Work on this
