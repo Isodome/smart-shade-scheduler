@@ -5,6 +5,7 @@ import logging
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_MODE_ENTITY, DOMAIN
 
@@ -46,7 +47,7 @@ class SmartShadesSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        now = datetime.now()
+        now = dt_util.now()
         expiry_td = self._manager._override_duration()
 
         assumed = {

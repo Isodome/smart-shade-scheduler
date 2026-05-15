@@ -11,6 +11,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
+from homeassistant.util import dt as dt_util
 
 from .logic import evaluate_rules, fill_targets, rule_matches
 from .const import (
@@ -39,7 +40,6 @@ def _coerce_state(state_str: str) -> float | None:
     """Coerce an entity state string to float for use as a condition variable."""
     # ISO datetime with timezone → HHMM in local time
     try:
-        from homeassistant.util import dt as dt_util
         dt = datetime.fromisoformat(state_str)
         if dt.tzinfo is not None:
             dt = dt_util.as_local(dt)
@@ -393,7 +393,7 @@ class ShadeManager:
         current_mode = mode_state.state if mode_state else None
 
         tolerance = self._tolerance()
-        now = datetime.now()
+        now = dt_util.now()
 
         groups = self.entry.options.get(CONF_RULES, [])
         mode_cfg = self.entry.options.get(CONF_MODE_CONFIG, {})
@@ -456,7 +456,7 @@ class ShadeManager:
                     # Still in transit — re-send position only, skip tilt
                     needs_pos = target_pos is not None and cur_pos is not None and abs(int(cur_pos) - target_pos) > tolerance
                     if needs_pos:
-                        self._last_commanded[entity_id] = {"p": target_pos, "t": target_tilt, "ts": datetime.now()}
+                        self._last_commanded[entity_id] = {"p": target_pos, "t": target_tilt, "ts": dt_util.now()}
                         pos_cmds[entity_id] = target_pos
                     else:
                         self._last_commanded[entity_id]["p"] = target_pos
@@ -488,7 +488,7 @@ class ShadeManager:
             needs_tilt = target_tilt is not None and cur_tilt is not None and abs(int(cur_tilt) - target_tilt) > tolerance
             needs_move = needs_pos or needs_tilt
             if entity_id not in self._last_commanded or needs_move:
-                self._last_commanded[entity_id] = {"p": target_pos, "t": target_tilt, "ts": datetime.now()}
+                self._last_commanded[entity_id] = {"p": target_pos, "t": target_tilt, "ts": dt_util.now()}
             else:
                 self._last_commanded[entity_id]["p"] = target_pos
                 self._last_commanded[entity_id]["t"] = target_tilt
