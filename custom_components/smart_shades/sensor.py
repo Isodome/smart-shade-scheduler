@@ -48,7 +48,7 @@ class SmartShadesSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         now = dt_util.now()
-        expiry_td = self._manager._override_duration()
+        expiry_td = self._manager.override_duration
 
         assumed = {
             entity_id: {
@@ -56,7 +56,7 @@ class SmartShadesSensor(SensorEntity):
                 [("position", cmd.get("p")), ("tilt", cmd.get("t"))]
                 if v is not None
             }
-            for entity_id, cmd in self._manager._last_commanded.items()
+            for entity_id, cmd in self._manager.assumed_positions.items()
         }
 
         overrides = {}

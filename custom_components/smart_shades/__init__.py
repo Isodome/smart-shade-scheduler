@@ -252,6 +252,14 @@ class ShadeManager:
     def active_overrides(self) -> dict[str, datetime]:
         return dict(self._overrides)
 
+    @property
+    def var_values(self) -> dict[str, float | None]:
+        return dict(self._var_values)
+
+    @property
+    def assumed_positions(self) -> dict[str, dict]:
+        return {k: dict(v) for k, v in self._last_commanded.items()}
+
     # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
@@ -326,7 +334,8 @@ class ShadeManager:
             return True
         return state.state == "on"
 
-    def _override_duration(self) -> timedelta:
+    @property
+    def override_duration(self) -> timedelta:
         # Entity-based override takes priority (backwards compat)
         entity = self.entry.data.get(CONF_OVERRIDE_DURATION_ENTITY)
         if entity:
@@ -443,7 +452,7 @@ class ShadeManager:
                     or cur_tilt is None
                     or abs(int(cur_tilt) - target_tilt) <= tolerance
                 )
-                expired = age >= self._override_duration()
+                expired = age >= self.override_duration
                 if expired or (pos_ok and tilt_ok):
                     _LOGGER.info(
                         "Override resolved for %s (age=%s)", entity_id, age

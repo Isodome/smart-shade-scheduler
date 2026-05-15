@@ -6,3 +6,5 @@ node_modules/
 .pytest_cache/
 .coverage
 htmlcov/
+audits/*
+!audits/process_instructions.md

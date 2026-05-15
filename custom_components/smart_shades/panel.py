@@ -132,7 +132,7 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
             {"short": v["short"], "long": v["long"], "type": v["type"]}
             for v in BUILT_IN_VARS
         ],
-        "var_values": manager._var_values if manager else {},
+        "var_values": manager.var_values if manager else {},
     })
 
 
