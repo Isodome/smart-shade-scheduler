@@ -343,14 +343,14 @@ class ShadeManager:
 
     @property
     def override_duration(self) -> timedelta:
-        # Entity-based override takes priority (backwards compat)
-        entity = self.entry.data.get(CONF_OVERRIDE_DURATION_ENTITY)
+        # Entity-based override takes priority (backwards compat via _opt)
+        entity = self._opt(CONF_OVERRIDE_DURATION_ENTITY, None)
         if entity:
             state = self.hass.states.get(entity)
-            if state:
+            if state and state.state not in ("unknown", "unavailable"):
                 try:
-                    return timedelta(hours=float(state.state))
-                except ValueError:
+                    return timedelta(minutes=float(state.state))
+                except (ValueError, TypeError):
                     pass
         minutes = int(self._opt(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION))
         return timedelta(minutes=minutes)

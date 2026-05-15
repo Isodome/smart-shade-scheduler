@@ -65,6 +65,12 @@ def _settings_schema(opts: dict) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
             ),
+            vol.Optional(
+                CONF_OVERRIDE_DURATION_ENTITY,
+                description={"suggested_value": opts.get(CONF_OVERRIDE_DURATION_ENTITY)},
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="input_number")
+            ),
         }
     )
 
@@ -153,6 +159,7 @@ class SmartShadesOptionsFlow(config_entries.OptionsFlow):
                     CONF_TILT_DELAY: int(user_input[CONF_TILT_DELAY]),
                     CONF_TRANSIT_GRACE: int(user_input[CONF_TRANSIT_GRACE]),
                     CONF_ARMED_ENTITY: user_input.get(CONF_ARMED_ENTITY) or None,
+                    CONF_OVERRIDE_DURATION_ENTITY: user_input.get(CONF_OVERRIDE_DURATION_ENTITY) or None,
                 },
             )
         merged = {**self.config_entry.data, **self.config_entry.options}
