@@ -1,0 +1,111 @@
+diff --git a/audits/2026-05-15/todo.md b/audits/2026-05-15/todo.md
+index c43b32d..ff8746f 100644
+--- a/audits/2026-05-15/todo.md
++++ b/audits/2026-05-15/todo.md
+@@ -11,6 +11,10 @@
+   - [ ] Work on this
+   - [ ] Done
+ 
++- **Add "Clear Overrides" button to hamburger menu** (improves UX by allowing bulk override clearing from the panel)
++  - [x] Work on this
++  - [ ] Done
++
+ - **Fix "Blind" covers bug** (add fallback for covers lacking `current_position` or `current_tilt_position` so commands aren't silently dropped)
+   - [x] Work on this
+   - [x] Done
+diff --git a/custom_components/smart_shades/panel.py b/custom_components/smart_shades/panel.py
+index 5a0c0de..e21fea3 100644
+--- a/custom_components/smart_shades/panel.py
++++ b/custom_components/smart_shades/panel.py
+@@ -2,6 +2,7 @@
+ 
+ import logging
+ import os
++from typing import TYPE_CHECKING
+ 
+ import voluptuous as vol
+ from homeassistant.components import websocket_api
+@@ -23,11 +24,14 @@ from .const import (
+     SPECIAL_MODES,
+ )
+ 
++if TYPE_CHECKING:
++    from . import ShadeManager
++
+ _LOGGER = logging.getLogger(__name__)
+ _PANEL_URL = "smart-shades"
+ _STATIC_URL = "/smart_shades_static"
+ _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
+-_JS_VERSION = "104"  # bump to bust the browser cache
++_JS_VERSION = "105"  # bump to bust the browser cache
+ 
+ 
+ async def async_setup(hass: HomeAssistant) -> None:
+@@ -64,6 +68,7 @@ async def async_setup(hass: HomeAssistant) -> None:
+ 
+     websocket_api.async_register_command(hass, ws_get_config)
+     websocket_api.async_register_command(hass, ws_save_rules)
++    websocket_api.async_register_command(hass, ws_clear_overrides)
+     _LOGGER.debug("Panel setup complete")
+ 
+ 
+@@ -160,3 +165,29 @@ def ws_save_rules(hass: HomeAssistant, connection, msg) -> None:
+         new_options[CONF_CUSTOM_VARS] = msg["custom_vars"]
+     hass.config_entries.async_update_entry(entry, options=new_options)
+     connection.send_result(msg["id"], {"success": True})
++
++
++# ---------------------------------------------------------------------------
++# WebSocket: clear manual overrides
++# ---------------------------------------------------------------------------
++
++@websocket_api.websocket_command({
++    vol.Required("type"): "smart_shades/clear_overrides",
++    vol.Optional("entity_id"): str,
++})
++@callback
++def ws_clear_overrides(hass: HomeAssistant, connection, msg) -> None:
++    from . import ShadeManager
++
++    found = False
++    for manager in hass.data.get(DOMAIN, {}).values():
++        if isinstance(manager, ShadeManager):
++            manager.clear_overrides(msg.get("entity_id"))
++            manager.async_schedule_evaluation(high_priority=True)
++            found = True
++
++    if not found:
++        connection.send_error(msg["id"], "not_found", "No active managers found")
++        return
++
++    connection.send_result(msg["id"], {"success": True})
+diff --git a/custom_components/smart_shades/www/smart_shades_panel.js b/custom_components/smart_shades/www/smart_shades_panel.js
+index 5eaaefa..1e8303e 100644
+--- a/custom_components/smart_shades/www/smart_shades_panel.js
++++ b/custom_components/smart_shades/www/smart_shades_panel.js
+@@ -1089,6 +1089,7 @@ class SmartShadesPanel extends HTMLElement {
+                 <div class="menu-section-label">Tools</div>
+                 <button id="export-btn" title="Copy all rules as JSON to the clipboard">Export Rules</button>
+                 <button id="import-btn" title="Replace all rules by pasting JSON — this overwrites everything">Import Rules</button>
++                <button id="clear-overrides-btn" title="Lift all manual override flags so all covers resume automation immediately">Clear All Overrides</button>
+                 <button id="llm-btn" title="Copy a full system prompt + current rules to the clipboard, ready to paste into an AI assistant">Generate LLM Prompt</button>
+               </div>
+               <div class="menu-section">
+@@ -1454,6 +1455,17 @@ class SmartShadesPanel extends HTMLElement {
+       this._render();
+     });
+ 
++    root.querySelector('#clear-overrides-btn')?.addEventListener('click', async () => {
++      if (!confirm('Clear all manual overrides and resume automation for all covers?')) return;
++      try {
++        await this._ws('smart_shades/clear_overrides');
++        if (this._cfg) this._cfg.overrides = []; // clear locally; avoids discarding unsaved edits
++        this._render();
++      } catch (e) {
++        alert(`Error: ${e.message ?? e}`);
++      }
++    });
++
+     root.querySelector('#export-btn')?.addEventListener('click', () => {
+       this._collect();
+       const json = JSON.stringify(this._groups, null, 2);

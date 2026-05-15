@@ -2,6 +2,7 @@
 
 import logging
 import os
+from typing import TYPE_CHECKING
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
@@ -23,11 +24,14 @@ from .const import (
     SPECIAL_MODES,
 )
 
+if TYPE_CHECKING:
+    from . import ShadeManager
+
 _LOGGER = logging.getLogger(__name__)
 _PANEL_URL = "smart-shades"
 _STATIC_URL = "/smart_shades_static"
 _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
-_JS_VERSION = "104"  # bump to bust the browser cache
+_JS_VERSION = "105"  # bump to bust the browser cache
 
 
 async def async_setup(hass: HomeAssistant) -> None:
@@ -64,6 +68,7 @@ async def async_setup(hass: HomeAssistant) -> None:
 
     websocket_api.async_register_command(hass, ws_get_config)
     websocket_api.async_register_command(hass, ws_save_rules)
+    websocket_api.async_register_command(hass, ws_clear_overrides)
     _LOGGER.debug("Panel setup complete")
 
 
@@ -159,4 +164,30 @@ def ws_save_rules(hass: HomeAssistant, connection, msg) -> None:
     if "custom_vars" in msg:
         new_options[CONF_CUSTOM_VARS] = msg["custom_vars"]
     hass.config_entries.async_update_entry(entry, options=new_options)
+    connection.send_result(msg["id"], {"success": True})
+
+
+# ---------------------------------------------------------------------------
+# WebSocket: clear manual overrides
+# ---------------------------------------------------------------------------
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smart_shades/clear_overrides",
+    vol.Optional("entity_id"): str,
+})
+@callback
+def ws_clear_overrides(hass: HomeAssistant, connection, msg) -> None:
+    from . import ShadeManager
+
+    found = False
+    for manager in hass.data.get(DOMAIN, {}).values():
+        if isinstance(manager, ShadeManager):
+            manager.clear_overrides(msg.get("entity_id"))
+            manager.async_schedule_evaluation(high_priority=True)
+            found = True
+
+    if not found:
+        connection.send_error(msg["id"], "not_found", "No active managers found")
+        return
+
     connection.send_result(msg["id"], {"success": True})

@@ -11,6 +11,10 @@
   - [ ] Work on this
   - [ ] Done
 
+- **Add "Clear Overrides" button to hamburger menu** (improves UX by allowing bulk override clearing from the panel)
+  - [x] Work on this
+  - [ ] Done
+
 - **Fix "Blind" covers bug** (add fallback for covers lacking `current_position` or `current_tilt_position` so commands aren't silently dropped)
   - [x] Work on this
   - [x] Done
