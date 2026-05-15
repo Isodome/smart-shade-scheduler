@@ -126,6 +126,7 @@ async def _async_options_updated(hass: HomeAssistant, entry) -> None:
     """Re-init listeners and immediately apply the new rules."""
     manager: ShadeManager | None = hass.data[DOMAIN].get(entry.entry_id)
     if manager:
+        manager._custom_resolvers = None
         manager.reinit_mode_listener()
         manager.reinit_armed_listener()
         await manager.async_evaluate_rules()
@@ -151,6 +152,7 @@ class ShadeManager:
 
         self._prev_vals: dict | None = None
         self._var_values: dict[str, float | None] = {}   # built-ins + custom, last eval
+        self._custom_resolvers: dict | None = None
 
         self._unsub: list = []
         self._mode_unsub = None
@@ -349,9 +351,10 @@ class ShadeManager:
 
         def _make(source):
             if source.startswith("{{") and source.endswith("}}"):
+                tpl = Template(source, self.hass)
                 def resolver(hass, now):
                     try:
-                        return _coerce_state(str(Template(source, hass).async_render()))
+                        return _coerce_state(str(tpl.async_render()))
                     except Exception:
                         return None
             else:
@@ -373,6 +376,11 @@ class ShadeManager:
             if name:
                 result[name] = _make(source)
         return result
+
+    def _get_custom_resolvers(self) -> dict[str, object]:
+        if self._custom_resolvers is None:
+            self._custom_resolvers = self._build_custom_resolvers()
+        return self._custom_resolvers
 
     async def async_evaluate_rules(self) -> None:
         """Evaluate rules, moving covers as needed. Skips overridden covers."""
@@ -400,7 +408,7 @@ class ShadeManager:
         block_fallback = mode_cfg.get(current_mode, {}).get("block_fallback", False)
 
         cur_vals: dict = {v["short"]: v["resolver"](self.hass, now) for v in BUILT_IN_VARS}
-        for name, resolver in self._build_custom_resolvers().items():
+        for name, resolver in self._get_custom_resolvers().items():
             if name not in cur_vals:
                 cur_vals[name] = resolver(self.hass, now)
 
