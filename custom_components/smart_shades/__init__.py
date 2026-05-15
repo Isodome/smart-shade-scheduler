@@ -127,6 +127,7 @@ async def _async_options_updated(hass: HomeAssistant, entry) -> None:
     manager: ShadeManager | None = hass.data[DOMAIN].get(entry.entry_id)
     if manager:
         manager.reinit_mode_listener()
+        manager.reinit_armed_listener()
         await manager.async_evaluate_rules()
 
 
@@ -153,6 +154,7 @@ class ShadeManager:
 
         self._unsub: list = []
         self._mode_unsub = None
+        self._armed_unsub = None
         self._eval_lock = asyncio.Lock()
         self._listeners: list = []
 
@@ -181,15 +183,17 @@ class ShadeManager:
         )
 
         self.reinit_mode_listener()
-        self._reinit_armed_listener()
+        self.reinit_armed_listener()
 
-    def _reinit_armed_listener(self) -> None:
+    def reinit_armed_listener(self) -> None:
+        if self._armed_unsub:
+            self._armed_unsub()
+            self._armed_unsub = None
+
         armed_entity = self._opt(CONF_ARMED_ENTITY, None)
         if armed_entity:
-            self._unsub.append(
-                async_track_state_change_event(
-                    self.hass, armed_entity, self._on_armed_change
-                )
+            self._armed_unsub = async_track_state_change_event(
+                self.hass, armed_entity, self._on_armed_change
             )
 
     def reinit_mode_listener(self) -> None:
@@ -212,6 +216,9 @@ class ShadeManager:
         if self._mode_unsub:
             self._mode_unsub()
             self._mode_unsub = None
+        if self._armed_unsub:
+            self._armed_unsub()
+            self._armed_unsub = None
 
     # ------------------------------------------------------------------
     # Public API
