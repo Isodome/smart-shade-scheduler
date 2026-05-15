@@ -31,11 +31,21 @@ For each human-annotated task in the `todo.md` list, the following execution loo
 
 ## Useful code review snippets
 ```bash
+# 1. Capture diff (shared)
+git diff origin/main...HEAD > audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch
+
+# 2. Define prompt (shared)
+PROMPT="Review this diff. It addresses finding [FINDING_NAME] from audits/<YYYY-MM-DD>/<agent>_audit_report.md. \
+Process rules: file:///home/dominic/dev/shade_scheduler/audits/process_instructions.md. \
+Is the finding properly addressed? Any bugs, security issues, or code quality concerns?"
+
+# 3. Run review — pick one CLI:
+
 # Gemini
-result=$(git diff origin/main...HEAD | gemini -p "Please review these changes. They are meant to address finding [FINDING_NAME] from the audit report in audits/<YYYY-MM-DD>_gemini_audit_report.md. Is the issue properly addressed? Are there any bugs, security issues, or code quality concerns?" --output-format json)
-echo "$result" | jq -r '.response' > pr-review-gemini.json
+gemini -p "$PROMPT" < audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch \
+  > audits/<YYYY-MM-DD>/tasks/<task_slug>/rev<N>.md
 
 # Claude
-git diff > audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch
-cat audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch | claude -p "Please review these changes according to [process_instructions.md](file:///home/dominic/dev/shade_scheduler/audits/process_instructions.md). They are meant to address finding [FINDING_NAME] from the audit report. Is the issue properly addressed? Are there any bugs, security issues, or code quality concerns?" > audits/<YYYY-MM-DD>/tasks/<task_slug>/rev1.md
+claude -p "$PROMPT" < audits/<YYYY-MM-DD>/tasks/<task_slug>/diff.patch \
+  > audits/<YYYY-MM-DD>/tasks/<task_slug>/rev<N>.md
 ```
