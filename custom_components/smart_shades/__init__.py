@@ -25,9 +25,11 @@ from .const import (
     CONF_RULES,
     CONF_TILT_DELAY,
     CONF_TOLERANCE,
+    CONF_TRANSIT_GRACE,
     DEFAULT_OVERRIDE_DURATION,
     DEFAULT_TILT_DELAY,
     DEFAULT_TOLERANCE,
+    DEFAULT_TRANSIT_GRACE,
     DOMAIN,
     FALLBACK_MODE,
     PRIORITY_MODE,
@@ -127,6 +129,9 @@ async def _async_options_updated(hass: HomeAssistant, entry) -> None:
     manager: ShadeManager | None = hass.data[DOMAIN].get(entry.entry_id)
     if manager:
         manager._custom_resolvers = None
+        manager._TRANSIT_GRACE = entry.options.get(
+            CONF_TRANSIT_GRACE, DEFAULT_TRANSIT_GRACE
+        )
         manager.reinit_mode_listener()
         manager.reinit_armed_listener()
         await manager.async_evaluate_rules()
@@ -148,7 +153,9 @@ class ShadeManager:
 
         # Seconds after a command during which divergence checks are suppressed
         # (cover may still be travelling to its commanded position)
-        self._TRANSIT_GRACE = 90
+        self._TRANSIT_GRACE = entry.options.get(
+            CONF_TRANSIT_GRACE, DEFAULT_TRANSIT_GRACE
+        )
 
         self._prev_vals: dict | None = None
         self._var_values: dict[str, float | None] = {}   # built-ins + custom, last eval

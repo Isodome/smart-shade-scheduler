@@ -12,9 +12,11 @@ from .const import (
     CONF_OVERRIDE_DURATION_ENTITY,
     CONF_TILT_DELAY,
     CONF_TOLERANCE,
+    CONF_TRANSIT_GRACE,
     DEFAULT_OVERRIDE_DURATION,
     DEFAULT_TILT_DELAY,
     DEFAULT_TOLERANCE,
+    DEFAULT_TRANSIT_GRACE,
     DOMAIN,
 )
 
@@ -45,6 +47,15 @@ def _settings_schema(opts: dict) -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0, max=120, step=1, mode="slider",
+                    unit_of_measurement="s",
+                )
+            ),
+            vol.Optional(
+                CONF_TRANSIT_GRACE,
+                default=opts.get(CONF_TRANSIT_GRACE, DEFAULT_TRANSIT_GRACE),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=300, step=5, mode="slider",
                     unit_of_measurement="s",
                 )
             ),
@@ -140,6 +151,7 @@ class SmartShadesOptionsFlow(config_entries.OptionsFlow):
                     CONF_TOLERANCE: int(user_input[CONF_TOLERANCE]),
                     CONF_OVERRIDE_DURATION: int(user_input[CONF_OVERRIDE_DURATION]),
                     CONF_TILT_DELAY: int(user_input[CONF_TILT_DELAY]),
+                    CONF_TRANSIT_GRACE: int(user_input[CONF_TRANSIT_GRACE]),
                     CONF_ARMED_ENTITY: user_input.get(CONF_ARMED_ENTITY) or None,
                 },
             )
