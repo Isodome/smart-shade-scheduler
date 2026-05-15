@@ -60,11 +60,16 @@ def rule_matches(
 
             if var_type == "time":
                 # Time is monotonic; =v never fires.
-                # Standard prev < threshold <= cur handles midnight wrap correctly.
                 if op_str == "=v":
                     return False
-                if not (prev < expected <= cur):
-                    return False
+                
+                # Check if a midnight wrap occurred between prev and cur
+                if cur < prev:
+                    if not (prev < expected or expected <= cur):
+                        return False
+                else:
+                    if not (prev < expected <= cur):
+                        return False
             elif isinstance(expected, str):
                 # String/boolean: crossing into or out of a specific state
                 if op_str == "=v":

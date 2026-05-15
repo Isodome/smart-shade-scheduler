@@ -19,3 +19,4 @@ _stub("homeassistant.helpers.event",
       async_track_state_change_event=None,
       async_track_time_change=None,
       async_track_time_interval=None)
+_stub("homeassistant.util", dt=object)
