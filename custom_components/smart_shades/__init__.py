@@ -482,6 +482,7 @@ class ShadeManager:
 
         pos_cmds: dict[str, int] = {}
         tilt_cmds: dict[str, int] = {}
+        pos_diffs: dict[str, int] = {}
 
         for entity_id, target in shade_targets.items():
             state = self.hass.states.get(entity_id)
@@ -582,6 +583,11 @@ class ShadeManager:
 
             if needs_pos:
                 pos_cmds[entity_id] = target_pos
+                # Calculate travel distance for tilt delay discounting
+                if cur_pos is not None:
+                    pos_diffs[entity_id] = abs(int(cur_pos) - target_pos)
+                else:
+                    pos_diffs[entity_id] = 100
             if needs_tilt:
                 tilt_cmds[entity_id] = target_tilt
 
@@ -600,9 +606,13 @@ class ShadeManager:
 
                 # Delay tilt only if THIS cover is also moving position
                 if entity_id in pos_cmds:
-                    async def _delayed_tilt(eid=entity_id, t=tilt):
+                    # Discount delay based on travel distance: (total - 5s floor) * scale + 5s floor
+                    scale = pos_diffs.get(entity_id, 100) / 100.0
+                    actual_delay = max(5, (delay - 5) * scale + 5)
+
+                    async def _delayed_tilt(eid=entity_id, t=tilt, d=actual_delay):
                         try:
-                            await asyncio.sleep(delay)
+                            await asyncio.sleep(d)
                             await self._send_tilt(eid, t)
                             # Reset transit grace so it starts from the ACTUAL tilt move
                             if eid in self._last_commanded:

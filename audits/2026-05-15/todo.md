@@ -13,6 +13,10 @@
 
 - **Add "Clear Overrides" button to hamburger menu** (improves UX by allowing bulk override clearing from the panel)
   - [x] Work on this
+  - [x] Done
+
+- **Discount tilt delay based on travel distance** (e.g. if moving 50% distance, wait only 50% of the configured delay)
+  - [x] Work on this
   - [ ] Done
 
 - **Fix "Blind" covers bug** (add fallback for covers lacking `current_position` or `current_tilt_position` so commands aren't silently dropped)
@@ -39,13 +43,14 @@
   - [ ] Work on this
   - [ ] Done
 
-- **Move `_TRANSIT_GRACE` to `const.py`** *(Note: Gemini disputes this and prefers making it a user config instead)*
-  - [ ] Work on this
-  - [ ] Done
 
 - **Add an `async_migrate_entry` stub** for v1 config *(Note: Gemini disputes this as an anti-pattern until v2)*
   - [ ] Work on this
   - [ ] Done
+
+- **Move `_TRANSIT_GRACE` to `const.py`** *(Note: This was completed and exposed to user config)*
+  - [x] Work on this
+  - [x] Done
 
 
 ## 4. Completed Tasks
