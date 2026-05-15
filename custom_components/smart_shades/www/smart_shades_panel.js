@@ -1089,8 +1089,8 @@ class SmartShadesPanel extends HTMLElement {
                 <div class="menu-section-label">Tools</div>
                 <button id="export-btn" title="Copy all rules as JSON to the clipboard">Export Rules</button>
                 <button id="import-btn" title="Replace all rules by pasting JSON — this overwrites everything">Import Rules</button>
-                <button id="clear-overrides-btn" title="Lift all manual override flags so all covers resume automation immediately">Clear All Overrides</button>
                 <button id="llm-btn" title="Copy a full system prompt + current rules to the clipboard, ready to paste into an AI assistant">Generate LLM Prompt</button>
+                <button id="clear-overrides-btn" title="Lift all manual override flags so all covers resume automation immediately">Clear All Overrides</button>
               </div>
               <div class="menu-section">
                 <button id="github-btn" class="menu-external">GitHub</button>
