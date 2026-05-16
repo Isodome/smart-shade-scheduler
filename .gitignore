@@ -6,6 +6,5 @@ node_modules/
 .pytest_cache/
 .coverage
 htmlcov/
-
-# Audits are now part of the repo history (tracking enabled)
-!audits/
+audits/*
+!audits/process_instructions.md

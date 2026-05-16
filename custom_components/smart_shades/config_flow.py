@@ -42,6 +42,12 @@ def _settings_schema(opts: dict) -> vol.Schema:
                 )
             ),
             vol.Optional(
+                CONF_OVERRIDE_DURATION_ENTITY,
+                description={"suggested_value": opts.get(CONF_OVERRIDE_DURATION_ENTITY)},
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="input_number")
+            ),
+            vol.Optional(
                 CONF_TILT_DELAY,
                 default=opts.get(CONF_TILT_DELAY, DEFAULT_TILT_DELAY),
             ): selector.NumberSelector(
@@ -64,12 +70,6 @@ def _settings_schema(opts: dict) -> vol.Schema:
                 description={"suggested_value": opts.get(CONF_ARMED_ENTITY)},
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
-            ),
-            vol.Optional(
-                CONF_OVERRIDE_DURATION_ENTITY,
-                description={"suggested_value": opts.get(CONF_OVERRIDE_DURATION_ENTITY)},
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="input_number")
             ),
         }
     )
