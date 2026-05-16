@@ -193,3 +193,36 @@ async def test_fast_mode_switch_sends_command_during_grace():
     assert mgr._last_commanded[_COVER]["p"] == 0
     assert mgr._last_commanded[_COVER]["t"] is None
     assert mgr._last_commanded[_COVER]["ts"] == T0 + timedelta(seconds=30)
+
+
+@pytest.mark.asyncio
+async def test_stale_tilt_task_cancelled_on_mode_switch():
+    """When mode switches to one with no tilt, any pending delayed tilt task must be cancelled."""
+    loop = asyncio.get_event_loop()
+    cover_pos = [50]
+    mgr = _make_manager(lambda: cover_pos[0])
+    # Make async_create_task use real asyncio tasks so cancel/done work correctly
+    mgr.hass.async_create_task = loop.create_task
+    module = "custom_components.smart_shades.__init__"
+
+    # Eval 1: mode A returns pos=80 + tilt=30 → delayed tilt task is created
+    with patch(f"{module}.evaluate_rules") as mock_eval, \
+         patch(f"{module}.dt_util") as mock_dt:
+        mock_dt.now.return_value = T0
+        mock_eval.return_value = {_COVER: {"p": 80, "t": 30}}
+        await mgr._do_evaluate()
+
+    assert _COVER in mgr._tilt_tasks, "Delayed tilt task should have been created"
+    stale_task = mgr._tilt_tasks[_COVER]
+    assert not stale_task.done(), "Stale task should still be pending"
+
+    # Eval 2: mode B returns pos=20, no tilt → stale tilt task must be cancelled
+    with patch(f"{module}.evaluate_rules") as mock_eval, \
+         patch(f"{module}.dt_util") as mock_dt:
+        mock_dt.now.return_value = T0 + timedelta(seconds=5)
+        mock_eval.return_value = {_COVER: {"p": 20, "t": None}}
+        await mgr._do_evaluate()
+
+    assert _COVER not in mgr._tilt_tasks, "Stale tilt task should have been removed"
+    await asyncio.sleep(0)  # let event loop process the cancellation
+    assert stale_task.cancelled(), "Stale tilt task should have been cancelled"

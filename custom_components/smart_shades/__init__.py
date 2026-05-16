@@ -599,6 +599,14 @@ class ShadeManager:
         for entity_id, pos in pos_cmds.items():
             await self._send_pos(entity_id, pos)
 
+        # Cancel tilt tasks for covers whose tilt target is gone or removed
+        for entity_id in list(self._tilt_tasks):
+            target = shade_targets.get(entity_id)
+            if target is None or target["t"] is None:
+                task = self._tilt_tasks.pop(entity_id, None)
+                if task:
+                    task.cancel()
+
         # Send tilt commands
         if tilt_cmds:
             # Add delay to allow position command to complete before tilting
