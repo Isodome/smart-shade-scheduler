@@ -94,3 +94,10 @@
 - **Prevent evaluation task pile-up** (debounce logic with high-priority escalation)
   - [x] Work on this
   - [x] Done
+
+## 5. User-Initiated Tasks
+
+- **Fix fast mode switching command stutter** (only send new commands during grace if target changes)
+  - [x] Work on this
+  - [x] Done
+

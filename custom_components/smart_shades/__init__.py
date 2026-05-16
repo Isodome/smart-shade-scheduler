@@ -560,19 +560,23 @@ class ShadeManager:
             # 1. Target is different from effective state.
             # 2. AND we are NOT in transit grace, OR the target itself has changed since our last command.
             
-            target_pos_changed = target_pos is not None and last_pos is not None and abs(int(last_pos) - target_pos) > tolerance
-            target_tilt_changed = target_tilt is not None and last_tilt is not None and abs(int(last_tilt) - target_tilt) > tolerance
+            target_pos_changed = target_pos is not None and (
+                last_pos is None or abs(int(last_pos) - target_pos) > tolerance
+            )
+            target_tilt_changed = target_tilt is not None and (
+                last_tilt is None or abs(int(last_tilt) - target_tilt) > tolerance
+            )
 
-            needs_pos = target_pos is not None and (
-                eff_pos is None 
-                or abs(int(eff_pos) - target_pos) > tolerance 
-                or (is_in_grace and target_pos_changed)
-            )
-            needs_tilt = target_tilt is not None and (
-                eff_tilt is None 
-                or abs(int(eff_tilt) - target_tilt) > tolerance
-                or (is_in_grace and target_tilt_changed)
-            )
+            if is_in_grace:
+                needs_pos = target_pos_changed
+                needs_tilt = target_tilt_changed
+            else:
+                needs_pos = target_pos is not None and (
+                    eff_pos is None or abs(int(eff_pos) - target_pos) > tolerance
+                )
+                needs_tilt = target_tilt is not None and (
+                    eff_tilt is None or abs(int(eff_tilt) - target_tilt) > tolerance
+                )
 
             needs_move = needs_pos or needs_tilt
             if entity_id not in self._last_commanded or needs_move:

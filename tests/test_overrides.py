@@ -25,7 +25,7 @@ def _ensure_stub(name, **attrs):
 
 _ensure_stub("homeassistant.helpers.template", Template=MagicMock())
 _ensure_stub("homeassistant.util")
-_ensure_stub("homeassistant.util.dt", as_local=lambda dt: dt)
+_ensure_stub("homeassistant.util.dt", as_local=lambda dt: dt, now=MagicMock())
 
 # ── Import under test ─────────────────────────────────────────────────────────
 
@@ -110,8 +110,8 @@ async def test_override_detected_after_transit_grace():
     module = "custom_components.smart_shades.__init__"
 
     # Eval 1 at T0: cover at target, no last_commanded yet → _control_shade called, ts=T0
-    with patch(f"{module}.datetime") as mock_dt:
-        mock_dt.now.return_value = T0
+    with patch(f"{module}.dt_util") as mock_dt_util:
+        mock_dt_util.now.return_value = T0
         await mgr._do_evaluate()
 
     assert _COVER in mgr._last_commanded
@@ -121,8 +121,8 @@ async def test_override_detected_after_transit_grace():
     cover_pos[0] = 100
 
     # Eval 2 at T0 + 120s (> TRANSIT_GRACE=90s): divergence should be detected
-    with patch(f"{module}.datetime") as mock_dt:
-        mock_dt.now.return_value = T0 + timedelta(seconds=120)
+    with patch(f"{module}.dt_util") as mock_dt_util:
+        mock_dt_util.now.return_value = T0 + timedelta(seconds=120)
         await mgr._do_evaluate()
 
     assert _COVER in mgr._overrides, "Override should be detected after transit grace has passed"
@@ -140,13 +140,13 @@ async def test_override_missed_due_to_transit_grace_refresh():
     module = "custom_components.smart_shades.__init__"
 
     # Eval 1 at T0: cover at target → _control_shade records ts=T0
-    with patch(f"{module}.datetime") as mock_dt:
-        mock_dt.now.return_value = T0
+    with patch(f"{module}.dt_util") as mock_dt_util:
+        mock_dt_util.now.return_value = T0
         await mgr._do_evaluate()
 
     # Eval 2 at T0+60s (sun.sun change): cover still at target → ts refreshed to T0+60s
-    with patch(f"{module}.datetime") as mock_dt:
-        mock_dt.now.return_value = T0 + timedelta(seconds=60)
+    with patch(f"{module}.dt_util") as mock_dt_util:
+        mock_dt_util.now.return_value = T0 + timedelta(seconds=60)
         await mgr._do_evaluate()
 
     # User moves cover manually between eval 2 and eval 3
@@ -154,12 +154,42 @@ async def test_override_missed_due_to_transit_grace_refresh():
 
     # Eval 3 at T0+120s (sun.sun change again): cmd_age = 120-60 = 60s < TRANSIT_GRACE(90)
     # → divergence check skipped → override NOT detected (the bug)
-    with patch(f"{module}.datetime") as mock_dt:
-        mock_dt.now.return_value = T0 + timedelta(seconds=120)
+    with patch(f"{module}.dt_util") as mock_dt_util:
+        mock_dt_util.now.return_value = T0 + timedelta(seconds=120)
         await mgr._do_evaluate()
 
-    # This assertion FAILS due to the bug — override was not detected
+    # With the fix, this assertion PASSES because ts is not refreshed
     assert _COVER in mgr._overrides, (
-        "Bug: transit grace window was reset by the intermediate eval; "
-        "override not detected even though cover diverged"
+        "Divergence should be detected even with intermediate evals "
+        "because transit grace should not be refreshed for same-target evals"
     )
+
+@pytest.mark.asyncio
+async def test_fast_mode_switch_sends_command_during_grace():
+    """Verify that if the target changes during transit grace, a new command IS sent."""
+    cover_pos = [_TARGET_POS]
+    mgr = _make_manager(lambda: cover_pos[0])
+    module = "custom_components.smart_shades.__init__"
+
+    # 1. Eval at T0 -> records target=50, ts=T0
+    with patch(f"{module}.dt_util") as mock_dt_util:
+        mock_dt_util.now.return_value = T0
+        await mgr._do_evaluate()
+    
+    assert mgr._last_commanded[_COVER]["p"] == 50
+    assert mgr._last_commanded[_COVER]["ts"] == T0
+    mgr.hass.services.async_call.reset_mock()
+
+    # 2. Target changes to 0 (e.g. mode switch) at T0 + 30s (< 90s grace)
+    # We must mock evaluate_rules to return a different target
+    with patch(f"{module}.evaluate_rules") as mock_eval:
+        mock_eval.return_value = {_COVER: {"p": 0, "t": None}}
+        with patch(f"{module}.dt_util") as mock_dt_util:
+            mock_dt_util.now.return_value = T0 + timedelta(seconds=30)
+            await mgr._do_evaluate()
+    
+    # Assert: command was sent and ts updated
+    assert mgr.hass.services.async_call.called, "Command should be sent even during grace if target changed"
+    assert mgr._last_commanded[_COVER]["p"] == 0
+    assert mgr._last_commanded[_COVER]["t"] is None
+    assert mgr._last_commanded[_COVER]["ts"] == T0 + timedelta(seconds=30)
