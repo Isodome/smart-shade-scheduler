@@ -10,7 +10,7 @@ from homeassistant.components.frontend import (
     async_register_built_in_panel,
     async_remove_panel,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 
 from .const import (
     BUILT_IN_VARS,
@@ -81,61 +81,72 @@ def async_unload(hass: HomeAssistant) -> None:
 # WebSocket: read current config + state
 # ---------------------------------------------------------------------------
 
-@websocket_api.websocket_command(
-    {vol.Required("type"): "smart_shades/get_config"}
-)
-@callback
-def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
-    entries = hass.config_entries.async_entries(DOMAIN)
-    if not entries:
-        connection.send_error(msg["id"], "not_found", "No config entry found")
-        return
+@websocket_api.websocket_command({
+    vol.Required("type"): "smart_shades/get_config",
+    vol.Optional("entry_id"): str,
+})
+@websocket_api.async_response
+async def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
+    """Fetch the current configuration for the panel."""
+    try:
+        entry_id = msg.get("entry_id")
+        if entry_id:
+            entry = hass.config_entries.async_get_entry(entry_id)
+        else:
+            entries = hass.config_entries.async_entries(DOMAIN)
+            entry = entries[0] if entries else None
 
-    entry = entries[0]
-    mode_entity = entry.data.get(CONF_MODE_ENTITY)
-    mode_state = hass.states.get(mode_entity) if mode_entity else None
+        if not entry:
+            connection.send_error(msg["id"], "not_found", "No config entry found")
+            return
 
-    entity_options: list[str] = (
-        list(mode_state.attributes.get("options", []))
-        if mode_state else []
-    )
-    rules = entry.options.get(CONF_RULES, [])
-    # Modes that have rules but no longer exist in the input_select
-    rule_modes = list(dict.fromkeys(
-        r["mode"] for r in rules if r.get("mode")
-    ))
-    orphaned = [
-        m for m in rule_modes
-        if m not in entity_options and m not in SPECIAL_MODES
-    ]
-    combined = (
-        [PRIORITY_MODE] + entity_options + orphaned + [FALLBACK_MODE]
-    )
+        mode_entity = entry.data.get(CONF_MODE_ENTITY)
+        mode_state = hass.states.get(mode_entity) if mode_entity else None
 
-    manager = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    overrides = (
-        list(manager.active_overrides.keys())
-        if manager and hasattr(manager, "active_overrides")
-        else []
-    )
+        entity_options: list[str] = (
+            list(mode_state.attributes.get("options") or [])
+            if mode_state else []
+        )
+        rules = entry.options.get(CONF_RULES, [])
+        # Modes that have rules but no longer exist in the input_select
+        rule_modes = list(dict.fromkeys(
+            r["mode"] for r in rules if isinstance(r, dict) and r.get("mode")
+        ))
+        orphaned = [
+            m for m in rule_modes
+            if m not in entity_options and m not in SPECIAL_MODES
+        ]
+        combined = (
+            [PRIORITY_MODE] + entity_options + orphaned + [FALLBACK_MODE]
+        )
 
-    connection.send_result(msg["id"], {
-        "entry_id": entry.entry_id,
-        "rules": rules,
-        "mode_config": entry.options.get(CONF_MODE_CONFIG, {}),
-        "mode_entity": mode_entity,
-        "current_mode": mode_state.state if mode_state else None,
-        "mode_options": combined,
-        "orphaned_modes": orphaned,
-        "special_modes": list(SPECIAL_MODES),
-        "overrides": overrides,
-        "custom_vars": entry.options.get(CONF_CUSTOM_VARS, ""),
-        "built_in_vars": [
-            {"short": v["short"], "long": v["long"], "type": v["type"]}
-            for v in BUILT_IN_VARS
-        ],
-        "var_values": manager.var_values if manager else {},
-    })
+        manager = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+        overrides = (
+            list(manager.active_overrides.keys())
+            if manager and hasattr(manager, "active_overrides")
+            else []
+        )
+
+        connection.send_result(msg["id"], {
+            "entry_id": entry.entry_id,
+            "mode_entity": mode_entity,
+            "mode_config": entry.options.get(CONF_MODE_CONFIG, {}),
+            "mode_options": combined,
+            "special_modes": list(SPECIAL_MODES),
+            "orphaned_modes": orphaned,
+            "rules": rules,
+            "overrides": overrides,
+            "current_mode": mode_state.state if mode_state else None,
+            "custom_vars": entry.options.get(CONF_CUSTOM_VARS, ""),
+            "built_in_vars": [
+                {"short": v["short"], "long": v["long"], "type": v["type"]}
+                for v in BUILT_IN_VARS
+            ],
+            "var_values": manager.var_values if manager else {},
+        })
+    except Exception as e:
+        _LOGGER.exception("Error in ws_get_config")
+        connection.send_error(msg["id"], "unknown_error", str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -149,22 +160,28 @@ def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
     vol.Optional("mode_config"): dict,
     vol.Optional("custom_vars"): str,
 })
-@callback
-def ws_save_rules(hass: HomeAssistant, connection, msg) -> None:
-    entry = hass.config_entries.async_get_entry(msg["entry_id"])
-    if not entry:
-        connection.send_error(
-            msg["id"], "not_found", "Config entry not found"
-        )
-        return
+@websocket_api.async_response
+async def ws_save_rules(hass: HomeAssistant, connection, msg) -> None:
+    """Persist the rules and mode configuration."""
+    try:
+        entry = hass.config_entries.async_get_entry(msg["entry_id"])
+        if not entry:
+            connection.send_error(
+                msg["id"], "not_found", "Config entry not found"
+            )
+            return
 
-    new_options = {**entry.options, CONF_RULES: msg["rules"]}
-    if "mode_config" in msg:
-        new_options[CONF_MODE_CONFIG] = msg["mode_config"]
-    if "custom_vars" in msg:
-        new_options[CONF_CUSTOM_VARS] = msg["custom_vars"]
-    hass.config_entries.async_update_entry(entry, options=new_options)
-    connection.send_result(msg["id"], {"success": True})
+        new_options = {**entry.options, CONF_RULES: msg["rules"]}
+        if "mode_config" in msg:
+            new_options[CONF_MODE_CONFIG] = msg["mode_config"]
+        if "custom_vars" in msg:
+            new_options[CONF_CUSTOM_VARS] = msg["custom_vars"]
+        
+        hass.config_entries.async_update_entry(entry, options=new_options)
+        connection.send_result(msg["id"], {"success": True})
+    except Exception as e:
+        _LOGGER.exception("Error in ws_save_rules")
+        connection.send_error(msg["id"], "unknown_error", str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -175,19 +192,24 @@ def ws_save_rules(hass: HomeAssistant, connection, msg) -> None:
     vol.Required("type"): "smart_shades/clear_overrides",
     vol.Optional("entity_id"): str,
 })
-@callback
-def ws_clear_overrides(hass: HomeAssistant, connection, msg) -> None:
-    from . import ShadeManager
+@websocket_api.async_response
+async def ws_clear_overrides(hass: HomeAssistant, connection, msg) -> None:
+    """Clear manual overrides."""
+    try:
+        from . import ShadeManager
 
-    found = False
-    for manager in hass.data.get(DOMAIN, {}).values():
-        if isinstance(manager, ShadeManager):
-            manager.clear_overrides(msg.get("entity_id"))
-            manager.async_schedule_evaluation(high_priority=True)
-            found = True
+        found = False
+        for manager in hass.data.get(DOMAIN, {}).values():
+            if isinstance(manager, ShadeManager):
+                manager.clear_overrides(msg.get("entity_id"))
+                manager.async_schedule_evaluation(high_priority=True)
+                found = True
 
-    if not found:
-        connection.send_error(msg["id"], "not_found", "No active managers found")
-        return
+        if not found:
+            connection.send_error(msg["id"], "not_found", "No active managers found")
+            return
 
-    connection.send_result(msg["id"], {"success": True})
+        connection.send_result(msg["id"], {"success": True})
+    except Exception as e:
+        _LOGGER.exception("Error in ws_clear_overrides")
+        connection.send_error(msg["id"], "unknown_error", str(e))

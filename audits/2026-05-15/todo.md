@@ -101,3 +101,7 @@
   - [x] Work on this
   - [x] Done
 
+
+- **Fix "Unknown Error" on save** (investigated and added diagnostic logging + safety checks)
+  - [x] Work on this
+  - [ ] Done
