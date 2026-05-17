@@ -2,8 +2,7 @@
 
 import asyncio
 import logging
-import re as _re
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, callback
@@ -14,6 +13,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 
 from .logic import evaluate_rules, fill_targets, rule_matches
+from .vars import build_custom_resolvers, normalize_built_ins, resolve_all
 from .const import (
     BUILT_IN_VARS,
     CONF_CUSTOM_VARS,
@@ -38,31 +38,6 @@ from .const import (
 )
 
 
-
-def _coerce_state(state_str: str) -> float | None:
-    """Coerce an entity state string to float for use as a condition variable."""
-    # ISO datetime with timezone → HHMM in local time
-    try:
-        dt = datetime.fromisoformat(state_str)
-        if dt.tzinfo is not None:
-            dt = dt_util.as_local(dt)
-        return float(dt.hour * 100 + dt.minute)
-    except (ValueError, TypeError, AttributeError):
-        pass
-    # HH:MM or HH:MM:SS
-    m = _re.match(r"^(\d{1,2}):(\d{2})", state_str)
-    if m:
-        return float(int(m.group(1)) * 100 + int(m.group(2)))
-    # Numeric string
-    try:
-        return float(state_str)
-    except (ValueError, TypeError):
-        pass
-    # on / off
-    low = state_str.lower()
-    if low == "on":  return 1.0
-    if low == "off": return 0.0
-    return None
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -413,39 +388,10 @@ class ShadeManager:
     def _tilt_delay(self) -> int:
         return int(self._opt(CONF_TILT_DELAY, DEFAULT_TILT_DELAY))
 
-    def _build_custom_resolvers(self) -> dict[str, object]:
-        """Parse custom_vars option and return {name: resolver(hass, now)} for each binding."""
-        from homeassistant.helpers.template import Template
+    def _build_custom_resolvers(self) -> dict[str, dict]:
+        return build_custom_resolvers(self.hass, self.entry.options.get(CONF_CUSTOM_VARS, ""))
 
-        def _make(source):
-            if source.startswith("{{") and source.endswith("}}"):
-                tpl = Template(source, self.hass)
-                def resolver(hass, now):
-                    try:
-                        return _coerce_state(str(tpl.async_render()))
-                    except Exception:
-                        return None
-            else:
-                def resolver(hass, now):
-                    state = hass.states.get(source)
-                    if state is None or state.state in ("unavailable", "unknown"):
-                        return None
-                    return _coerce_state(state.state)
-            return resolver
-
-        result = {}
-        for line in self.entry.options.get(CONF_CUSTOM_VARS, "").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            name, _, source = line.partition("=")
-            name = name.strip().lower()
-            source = source.strip()
-            if name:
-                result[name] = _make(source)
-        return result
-
-    def _get_custom_resolvers(self) -> dict[str, object]:
+    def _get_custom_resolvers(self) -> dict[str, dict]:
         if self._custom_resolvers is None:
             self._custom_resolvers = self._build_custom_resolvers()
         return self._custom_resolvers
@@ -470,14 +416,13 @@ class ShadeManager:
         mode_cfg = self.entry.options.get(CONF_MODE_CONFIG, {})
         block_fallback = mode_cfg.get(current_mode, {}).get("block_fallback", False)
 
-        cur_vals: dict = {v["short"]: v["resolver"](self.hass, now) for v in BUILT_IN_VARS}
-        for name, resolver in self._get_custom_resolvers().items():
-            if name not in cur_vals:
-                cur_vals[name] = resolver(self.hass, now)
+        built_in_specs = normalize_built_ins(BUILT_IN_VARS)
+        custom_specs   = {k: v for k, v in self._get_custom_resolvers().items() if k not in built_in_specs}
+        cur_vals, all_types = resolve_all(self.hass, now, {**built_in_specs, **custom_specs})
 
         self._var_values = dict(cur_vals)
 
-        shade_targets = evaluate_rules(groups, current_mode, cur_vals, self._prev_vals, block_fallback)
+        shade_targets = evaluate_rules(groups, current_mode, cur_vals, self._prev_vals, block_fallback, extra_types=all_types)
         self._prev_vals = cur_vals
 
         pos_cmds: dict[str, int] = {}

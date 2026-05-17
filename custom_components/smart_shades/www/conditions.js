@@ -12,13 +12,16 @@ const _DISPLAY = {
 export let CONDITION_SPEC = [];
 let _LONG_TO_SHORT = {};
 let _TIME_VARS     = new Set();
+let _BOOL_VARS     = new Set();
 
-// Called from the panel after ws_get_config returns built_in_vars.
+// Called from the panel after ws_get_config returns built_in_vars + custom_var_specs.
 // Also called immediately below with the seed so parsing works before first load.
-export function initConditionSpec(builtInVars) {
-  CONDITION_SPEC = builtInVars.map(v => ({ ...v, ...(_DISPLAY[v.short] ?? {}) }));
+export function initConditionSpec(builtInVars, customVarSpecs = []) {
+  const allVars = [...builtInVars, ...customVarSpecs];
+  CONDITION_SPEC = allVars.map(v => ({ ...v, ...(_DISPLAY[v.short] ?? {}) }));
   _LONG_TO_SHORT = Object.fromEntries(CONDITION_SPEC.map(s => [s.long, s.short]));
   _TIME_VARS     = new Set(CONDITION_SPEC.filter(s => s.type === 'time').map(s => s.short));
+  _BOOL_VARS     = new Set(CONDITION_SPEC.filter(s => s.type === 'bool').map(s => s.short));
 }
 
 // Seed: lets parsing/validation work before the server responds.
@@ -37,9 +40,12 @@ export function conditionHintHtml() {
     .map(s => s.hintExamples.map(e => `<code>${e}</code>`).join(' ') + ' ' + s.long)
     .join(' &nbsp;\n          ');
 
+  const boolItems = [..._BOOL_VARS].map(s => `<code>${s}</code> <code>!${s}</code>`).join(' &nbsp; ');
+  const boolHint  = boolItems ? `Bool vars (no operator): ${boolItems}<br>` : '';
+
   return `Conditions (space-separated, empty = catch-all):<br>
           ${rangeItems}<br>
-          Crossing (fires once): <code>=</code> either &nbsp; <code>=^</code> rising &nbsp; <code>=v</code> falling<br>`;
+          ${boolHint}Crossing (fires once): <code>=</code> either &nbsp; <code>=^</code> rising &nbsp; <code>=v</code> falling<br>`;
 }
 
 export function conditionLlmText() {
@@ -48,7 +54,12 @@ export function conditionLlmText() {
     .map(s => s.llm)
     .join(', ');
 
-  return `Condition variables: ${varList}.
+  const boolVarList = [..._BOOL_VARS].map(s => `"${s}" (bool — use bare "${s}" or "!${s}")`).join(', ');
+  const boolSection = boolVarList
+    ? `\nBool custom vars: ${boolVarList}. Write the var name alone (no operator/value) — it fires when truthy. Prefix with ! for falsy.\n`
+    : '';
+
+  return `Condition variables: ${varList}.${boolSection}
 Custom variables can be defined in the Variables panel (☰ → Custom Variables): bind a short name to any HA entity or Jinja2 template and use it as a condition token.
 
 Range operators: ">", ">=", "<", "<=", "==". True continuously while the value satisfies the comparison.
@@ -64,11 +75,13 @@ All conditions in a rule are ANDed.`;
 
 // ── Parsing / validation / formatting ────────────────────────────────────────
 
-// The var-name part is a generic identifier — all name knowledge lives in
-// _LONG_TO_SHORT (derived from the server spec via initConditionSpec).
+// Standard condition token: var op val (op required, val required).
 // Operators: longest alternatives first so =^, =v, == aren't shadowed by =.
 // \s* around the operator so "az > 150" parses the same as "az>150".
 const _TOKEN_RE = /([a-z][a-z0-9_]*)\s*(>=|<=|==|=\^|=v|>|<|=)\s*(-?\d+(?::\d+)?(?:\.\d+)?)/gi;
+
+// Bool token: optional ! prefix + identifier. Only valid for vars in _BOOL_VARS.
+const _BOOL_TOKEN_RE = /(!?)([a-z][a-z0-9_]*)/gi;
 
 function _normalizeVar(raw) {
   const lower = raw.toLowerCase();
@@ -77,6 +90,7 @@ function _normalizeVar(raw) {
 
 export function parseCondition(str) {
   const conditions = [];
+  // Pass 1: standard op+val tokens
   for (const [, rawVar, rawOp, val] of str.matchAll(_TOKEN_RE)) {
     conditions.push({
       var: _normalizeVar(rawVar),
@@ -84,22 +98,38 @@ export function parseCondition(str) {
       val: parseFloat(val.replace(':', ''))
     });
   }
+  // Pass 2: bare bool tokens from remainder
+  const remainder = str.replace(_TOKEN_RE, ' ');
+  _BOOL_TOKEN_RE.lastIndex = 0;
+  for (const [, neg, rawVar] of remainder.matchAll(_BOOL_TOKEN_RE)) {
+    const short = _normalizeVar(rawVar);
+    if (_BOOL_VARS.has(short)) {
+      conditions.push({ var: short, op: neg ? '!bool' : 'bool' });
+    }
+  }
   return conditions;
 }
 
 /** Returns {ok: bool, bad: string[]} */
 export function validateCondition(str) {
   if (!str.trim()) return { ok: true, bad: [] };
-  const remaining = str
-    .replace(_TOKEN_RE, '')
-    .replace(/\s+/g, '');
-  return remaining ? { ok: false, bad: [remaining] } : { ok: true, bad: [] };
+  // Remove standard tokens
+  let remaining = str.replace(_TOKEN_RE, ' ');
+  // Remove valid bool tokens
+  _BOOL_TOKEN_RE.lastIndex = 0;
+  remaining = remaining.replace(_BOOL_TOKEN_RE, (match, neg, rawVar) => {
+    return _BOOL_VARS.has(_normalizeVar(rawVar)) ? ' ' : match;
+  });
+  const leftover = remaining.replace(/\s+/g, '');
+  return leftover ? { ok: false, bad: [leftover] } : { ok: true, bad: [] };
 }
 
 export function formatCondition(conditions) {
   if (!conditions || !Array.isArray(conditions)) return '';
   return conditions.map(cond => {
     const short = _normalizeVar(cond.var);
+    if (cond.op === 'bool')  return short;
+    if (cond.op === '!bool') return `!${short}`;
     let v = cond.val;
     if (_TIME_VARS.has(short)) {
       const strV = String(v).padStart(3, '0');

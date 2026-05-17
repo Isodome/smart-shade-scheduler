@@ -157,6 +157,37 @@ def test_day_specific():
     assert     rule_matches([c("d",  "==", 0)], {**_vals(), "d": 0})  # Monday
     assert not rule_matches([c("d",  "==", 0)], {**_vals(), "d": 1})  # Tuesday
 
+
+# ── Bool operators ─────────────────────────────────────────────────────────────
+
+def _bool_vals(motion=1.0, **kwargs):
+    return {**_vals(**kwargs), "motion": motion}
+
+def test_bool_op_truthy_fires_when_nonzero():
+    assert     rule_matches([{"var": "motion", "op": "bool"}], _bool_vals(motion=1.0))
+    assert not rule_matches([{"var": "motion", "op": "bool"}], _bool_vals(motion=0.0))
+
+def test_bool_op_not_fires_when_zero():
+    assert     rule_matches([{"var": "motion", "op": "!bool"}], _bool_vals(motion=0.0))
+    assert not rule_matches([{"var": "motion", "op": "!bool"}], _bool_vals(motion=1.0))
+
+def test_bool_op_combined_with_other_conditions():
+    conds = [{"var": "motion", "op": "bool"}, c("az", ">", 150)]
+    assert     rule_matches(conds, _bool_vals(motion=1.0, azimuth=200.0))
+    assert not rule_matches(conds, _bool_vals(motion=0.0, azimuth=200.0))
+    assert not rule_matches(conds, _bool_vals(motion=1.0, azimuth=100.0))
+
+def test_bool_op_unavailable_var_fails_safe():
+    assert not rule_matches([{"var": "motion", "op": "bool"}], {**_vals(), "motion": None})
+
+def test_bool_op_uses_extra_types_passthrough():
+    # extra_types doesn't affect bool/!bool behaviour (op is explicit) but
+    # verifies the signature is accepted without error.
+    vals = _bool_vals(motion=1.0)
+    assert rule_matches(
+        [{"var": "motion", "op": "bool"}], vals, extra_types={"motion": "bool"}
+    )
+
 def test_day_long_name_accepted():
     assert rule_matches([c("day", "==", 0)], {**_vals(), "d": 0})
 

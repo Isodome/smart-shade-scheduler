@@ -30,11 +30,14 @@ const _DISPLAY = {
 let CONDITION_SPEC = [];
 let _LONG_TO_SHORT = {};
 let _TIME_VARS     = new Set();
+let _BOOL_VARS     = new Set();
 
-function initConditionSpec(builtInVars) {
-  CONDITION_SPEC = builtInVars.map(v => ({ ...v, ...(_DISPLAY[v.short] ?? {}) }));
+function initConditionSpec(builtInVars, customVarSpecs = []) {
+  const allVars = [...builtInVars, ...customVarSpecs];
+  CONDITION_SPEC = allVars.map(v => ({ ...v, ...(_DISPLAY[v.short] ?? {}) }));
   _LONG_TO_SHORT = Object.fromEntries(CONDITION_SPEC.map(s => [s.long, s.short]));
   _TIME_VARS     = new Set(CONDITION_SPEC.filter(s => s.type === 'time').map(s => s.short));
+  _BOOL_VARS     = new Set(CONDITION_SPEC.filter(s => s.type === 'bool').map(s => s.short));
 }
 
 initConditionSpec([
@@ -50,14 +53,20 @@ function conditionHintHtml() {
     .filter(s => s.hintExamples)
     .map(s => s.hintExamples.map(e => `<code>${e}</code>`).join(' ') + ' ' + s.long)
     .join(' &nbsp;\n          ');
+  const boolItems = [..._BOOL_VARS].map(s => `<code>${s}</code> <code>!${s}</code>`).join(' &nbsp; ');
+  const boolHint  = boolItems ? `Bool vars (no operator): ${boolItems}<br>` : '';
   return `Conditions (space-separated, empty = catch-all):<br>
           ${rangeItems}<br>
-          Crossing (fires once): <code>=</code> either &nbsp; <code>=^</code> rising &nbsp; <code>=v</code> falling<br>`;
+          ${boolHint}Crossing (fires once): <code>=</code> either &nbsp; <code>=^</code> rising &nbsp; <code>=v</code> falling<br>`;
 }
 
 function conditionLlmText() {
   const varList = CONDITION_SPEC.filter(s => s.llm).map(s => s.llm).join(', ');
-  return `Condition variables: ${varList}.
+  const boolVarList = [..._BOOL_VARS].map(s => `"${s}" (bool — use bare "${s}" or "!${s}")`).join(', ');
+  const boolSection = boolVarList
+    ? `\nBool custom vars: ${boolVarList}. Write the var name alone (no operator/value) — it fires when truthy. Prefix with ! for falsy.\n`
+    : '';
+  return `Condition variables: ${varList}.${boolSection}
 Custom variables can be defined in the Variables panel (☰ → Custom Variables): bind a short name to any HA entity or Jinja2 template and use it as a condition token.
 
 Range operators: ">", ">=", "<", "<=", "==". True continuously while the value satisfies the comparison.
@@ -71,7 +80,8 @@ Crossing conditions never fire on the first evaluation after HA restarts. If a v
 All conditions in a rule are ANDed.`;
 }
 
-const _TOKEN_RE = /([a-z][a-z0-9_]*)\s*(>=|<=|==|=\^|=v|>|<|=)\s*(-?\d+(?::\d+)?(?:\.\d+)?)/gi;
+const _TOKEN_RE      = /([a-z][a-z0-9_]*)\s*(>=|<=|==|=\^|=v|>|<|=)\s*(-?\d+(?::\d+)?(?:\.\d+)?)/gi;
+const _BOOL_TOKEN_RE = /(!?)([a-z][a-z0-9_]*)/gi;
 
 function _normalizeVar(raw) {
   const lower = raw.toLowerCase();
@@ -83,19 +93,34 @@ function parseCondition(str) {
   for (const [, rawVar, rawOp, val] of str.matchAll(_TOKEN_RE)) {
     conditions.push({ var: _normalizeVar(rawVar), op: rawOp, val: parseFloat(val.replace(':', '')) });
   }
+  const remainder = str.replace(_TOKEN_RE, ' ');
+  _BOOL_TOKEN_RE.lastIndex = 0;
+  for (const [, neg, rawVar] of remainder.matchAll(_BOOL_TOKEN_RE)) {
+    const short = _normalizeVar(rawVar);
+    if (_BOOL_VARS.has(short)) {
+      conditions.push({ var: short, op: neg ? '!bool' : 'bool' });
+    }
+  }
   return conditions;
 }
 
 function validateCondition(str) {
   if (!str.trim()) return { ok: true, bad: [] };
-  const remaining = str.replace(_TOKEN_RE, '').replace(/\s+/g, '');
-  return remaining ? { ok: false, bad: [remaining] } : { ok: true, bad: [] };
+  let remaining = str.replace(_TOKEN_RE, ' ');
+  _BOOL_TOKEN_RE.lastIndex = 0;
+  remaining = remaining.replace(_BOOL_TOKEN_RE, (match, neg, rawVar) => {
+    return _BOOL_VARS.has(_normalizeVar(rawVar)) ? ' ' : match;
+  });
+  const leftover = remaining.replace(/\s+/g, '');
+  return leftover ? { ok: false, bad: [leftover] } : { ok: true, bad: [] };
 }
 
 function formatCondition(conditions) {
   if (!conditions || !Array.isArray(conditions)) return '';
   return conditions.map(cond => {
     const short = _normalizeVar(cond.var);
+    if (cond.op === 'bool')  return short;
+    if (cond.op === '!bool') return `!${short}`;
     let v = cond.val;
     if (_TIME_VARS.has(short)) {
       const strV = String(v).padStart(3, '0');
@@ -665,8 +690,9 @@ class SmartShadesPanel extends HTMLElement {
     this._error         = null;
     this._pendingDelete = null; // { group, gIdx, timer }
     this._modeConfig      = {};   // mode → { block_fallback, force }
-    this._customVars = "";   // raw text bindings
-    this._varValues  = {};   // all var values (built-ins + custom) from last eval
+    this._customVars     = "";   // raw text bindings
+    this._customVarSpecs = [];   // [{short, long, type}] parsed by server
+    this._varValues      = {};   // all var values (built-ins + custom) from last eval
     this._collapsedModes = new Set();
   }
 
@@ -682,9 +708,10 @@ class SmartShadesPanel extends HTMLElement {
       this._groups     = JSON.parse(JSON.stringify(cfg.rules || []));
       this._modeConfig = JSON.parse(JSON.stringify(cfg.mode_config || {}));
       this._modes      = cfg.mode_options || [];
-      this._customVars = cfg.custom_vars || "";
-      this._varValues  = cfg.var_values  || {};
-      initConditionSpec(cfg.built_in_vars || []);
+      this._customVars     = cfg.custom_vars      || "";
+      this._customVarSpecs = cfg.custom_var_specs || [];
+      this._varValues      = cfg.var_values       || {};
+      initConditionSpec(cfg.built_in_vars || [], this._customVarSpecs);
       this._orphaned = new Set(cfg.orphaned_modes || []);
       this._special  = new Set(cfg.special_modes  || []);
       this._mode     = this._modes.includes(cfg.current_mode)
@@ -1121,7 +1148,11 @@ class SmartShadesPanel extends HTMLElement {
         </div>
         <textarea id="vars-textarea" class="dialog-textarea" rows="8"
           placeholder="alarm=sensor.next_alarm_time&#10;temp=sensor.living_room_temperature&#10;motion={{states('binary_sensor.motion') == 'on' and 1 or 0}}"></textarea>
-        <div id="vars-resolved" style="margin:8px 0; font-size:12px; font-family:monospace; opacity:0.8; white-space:pre;"></div>
+        <div style="display:flex; align-items:center; gap:6px; margin:8px 0 2px;">
+          <span style="font-size:12px; opacity:0.6;">Current values</span>
+          <button id="vars-refresh" class="secondary-btn" style="padding:1px 7px; font-size:11px;">↺ Refresh</button>
+        </div>
+        <div id="vars-resolved" style="margin:0 0 8px; font-size:12px; font-family:monospace; opacity:0.8; white-space:pre;"></div>
         <div class="dialog-actions">
           <button class="secondary-btn" id="vars-cancel">Cancel</button>
           <button class="save-btn" id="vars-save">Save & Apply</button>
@@ -1434,15 +1465,30 @@ class SmartShadesPanel extends HTMLElement {
       }
     };
 
-    root.querySelector('#vars-btn')?.addEventListener('click', () => {
-      const d = root.querySelector('#vars-dialog');
+    const refreshVarsValues = async () => {
+      root.querySelector('#vars-resolved').textContent = 'Evaluating…';
+      const customVarsText = root.querySelector('#vars-textarea').value;
+      try {
+        const res = await this._ws('smart_shades/eval_custom_vars', { custom_vars: customVarsText });
+        const specs = res.specs || [];
+        root.querySelector('#vars-resolved').textContent = specs.length
+          ? specs.map(s => {
+              const valStr = s.value == null ? 'unavailable' : String(s.value);
+              return `  ${s.short.padEnd(12)} [${s.type}]  = ${valStr}`;
+            }).join('\n')
+          : '(no bindings defined)';
+      } catch (e) {
+        root.querySelector('#vars-resolved').textContent = `Error: ${e.message ?? e}`;
+      }
+    };
+
+    root.querySelector('#vars-btn')?.addEventListener('click', async () => {
       root.querySelector('#vars-textarea').value = this._customVars;
-      const entries = Object.entries(this._varValues);
-      root.querySelector('#vars-resolved').textContent = entries.length
-        ? 'Current values (last evaluation):\n' + entries.map(([k, v]) => `  ${k} = ${v ?? 'unavailable'}`).join('\n')
-        : '(no values yet — wait for first evaluation cycle)';
-      d.showModal();
+      root.querySelector('#vars-dialog').showModal();
+      await refreshVarsValues();
     });
+
+    root.querySelector('#vars-refresh')?.addEventListener('click', () => refreshVarsValues());
 
     root.querySelector('#vars-cancel')?.addEventListener('click', () => {
       root.querySelector('#vars-dialog').close();

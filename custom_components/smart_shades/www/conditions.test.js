@@ -90,3 +90,60 @@ test('formatCondition accepts long var names and outputs short form', () => {
   expect(formatCondition([{ var: 'elevation', op: '<', val: 30 }])).toBe('el<30');
   expect(formatCondition([{ var: 'time', op: '>=', val: 830 }])).toBe('t>=8:30');
 });
+
+// ── Bool var tests ────────────────────────────────────────────────────────────
+
+import { initConditionSpec } from './conditions.js';
+
+const _ALL_BUILT_INS = [
+  { short: 'az', long: 'azimuth',   type: 'number' },
+  { short: 'el', long: 'elevation', type: 'number' },
+  { short: 't',  long: 'time',      type: 'time'   },
+  { short: 'mo', long: 'month',     type: 'number' },
+  { short: 'd',  long: 'day',       type: 'number' },
+];
+
+describe('bool vars', () => {
+  beforeEach(() => {
+    initConditionSpec(_ALL_BUILT_INS, [{ short: 'motion', long: 'motion', type: 'bool' }]);
+  });
+  afterEach(() => {
+    initConditionSpec(_ALL_BUILT_INS);  // restore default spec
+  });
+
+  test('parseCondition: bare bool var → bool op', () => {
+    expect(parseCondition('motion')).toEqual([{ var: 'motion', op: 'bool' }]);
+  });
+
+  test('parseCondition: negated bool var → !bool op', () => {
+    expect(parseCondition('!motion')).toEqual([{ var: 'motion', op: '!bool' }]);
+  });
+
+  test('parseCondition: bool var mixed with standard condition', () => {
+    expect(parseCondition('az>150 motion')).toEqual([
+      { var: 'az', op: '>', val: 150 },
+      { var: 'motion', op: 'bool' },
+    ]);
+  });
+
+  test('validateCondition: bare bool var is valid', () => {
+    expect(validateCondition('motion').ok).toBe(true);
+    expect(validateCondition('!motion').ok).toBe(true);
+    expect(validateCondition('az>150 motion').ok).toBe(true);
+  });
+
+  test('validateCondition: bare unknown var is still invalid', () => {
+    expect(validateCondition('foo').ok).toBe(false);
+    expect(validateCondition('!foo').ok).toBe(false);
+  });
+
+  test('formatCondition: bool op → bare name', () => {
+    expect(formatCondition([{ var: 'motion', op: 'bool' }])).toBe('motion');
+    expect(formatCondition([{ var: 'motion', op: '!bool' }])).toBe('!motion');
+  });
+
+  test('formatCondition: bool round-trip', () => {
+    const parsed = parseCondition('az>150 !motion');
+    expect(formatCondition(parsed)).toBe('az>150 !motion');
+  });
+});

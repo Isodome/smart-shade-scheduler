@@ -31,7 +31,7 @@ _LOGGER = logging.getLogger(__name__)
 _PANEL_URL = "smart-shades"
 _STATIC_URL = "/smart_shades_static"
 _WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
-_JS_VERSION = "106"  # bump to bust the browser cache
+_JS_VERSION = "109"  # bump to bust the browser cache
 
 
 async def async_setup(hass: HomeAssistant) -> None:
@@ -69,6 +69,7 @@ async def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_config)
     websocket_api.async_register_command(hass, ws_save_rules)
     websocket_api.async_register_command(hass, ws_clear_overrides)
+    websocket_api.async_register_command(hass, ws_eval_custom_vars)
     _LOGGER.debug("Panel setup complete")
 
 
@@ -127,6 +128,11 @@ async def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
             else []
         )
 
+        custom_var_specs = []
+        if manager:
+            for name, spec in manager._get_custom_resolvers().items():
+                custom_var_specs.append({"short": name, "long": name, "type": spec["type_fn"]()})
+
         connection.send_result(msg["id"], {
             "entry_id": entry.entry_id,
             "mode_entity": mode_entity,
@@ -142,6 +148,7 @@ async def ws_get_config(hass: HomeAssistant, connection, msg) -> None:
                 {"short": v["short"], "long": v["long"], "type": v["type"]}
                 for v in BUILT_IN_VARS
             ],
+            "custom_var_specs": custom_var_specs,
             "var_values": manager.var_values if manager else {},
         })
     except Exception as e:
@@ -212,4 +219,24 @@ async def ws_clear_overrides(hass: HomeAssistant, connection, msg) -> None:
         connection.send_result(msg["id"], {"success": True})
     except Exception as e:
         _LOGGER.exception("Error in ws_clear_overrides")
+        connection.send_error(msg["id"], "unknown_error", str(e))
+
+
+# ---------------------------------------------------------------------------
+# WebSocket: ad-hoc evaluate custom variable bindings (no config change)
+# ---------------------------------------------------------------------------
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smart_shades/eval_custom_vars",
+    vol.Required("custom_vars"): str,
+})
+@websocket_api.async_response
+async def ws_eval_custom_vars(hass: HomeAssistant, connection, msg) -> None:
+    """Evaluate custom variable bindings on-the-fly without modifying config."""
+    try:
+        from .vars import eval_vars
+        results = eval_vars(hass, msg["custom_vars"])
+        connection.send_result(msg["id"], {"specs": results})
+    except Exception as e:
+        _LOGGER.exception("Error in ws_eval_custom_vars")
         connection.send_error(msg["id"], "unknown_error", str(e))
