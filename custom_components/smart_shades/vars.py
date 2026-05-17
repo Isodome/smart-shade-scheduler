@@ -5,6 +5,7 @@ from datetime import datetime
 
 from homeassistant.util import dt as dt_util
 
+_RE_HHMM = _re.compile(r"^(\d{1,2}):(\d{2})")
 
 # ---------------------------------------------------------------------------
 # State coercion
@@ -12,6 +13,19 @@ from homeassistant.util import dt as dt_util
 
 def _coerce_state(state_str: str) -> float | None:
     """Coerce an entity state string to float for use as a condition variable."""
+    state_str = state_str.strip()
+    try:
+        return float(state_str)
+    except (ValueError, TypeError):
+        pass
+    low = state_str.lower()
+    if low in ("on",  "true",  "yes"): return 1.0
+    if low in ("off", "false", "no"):  return 0.0
+    m = _RE_HHMM.match(state_str)
+    if m:
+        return float(int(m.group(1)) * 100 + int(m.group(2)))
+    if len(state_str) < 10:
+        return None
     try:
         dt = datetime.fromisoformat(state_str)
         if dt.tzinfo is not None:
@@ -19,16 +33,6 @@ def _coerce_state(state_str: str) -> float | None:
         return float(dt.hour * 100 + dt.minute)
     except (ValueError, TypeError, AttributeError):
         pass
-    m = _re.match(r"^(\d{1,2}):(\d{2})", state_str)
-    if m:
-        return float(int(m.group(1)) * 100 + int(m.group(2)))
-    try:
-        return float(state_str)
-    except (ValueError, TypeError):
-        pass
-    low = state_str.strip().lower()
-    if low in ("on",  "true",  "yes"): return 1.0
-    if low in ("off", "false", "no"):  return 0.0
     return None
 
 
@@ -36,24 +40,27 @@ def _coerce_state(state_str: str) -> float | None:
 # Type inference
 # ---------------------------------------------------------------------------
 
-def _infer_type_from_raw(raw: str | None) -> str:
+def _infer_type_from_value(raw: str | None) -> str:
+    """Infer "bool", "time", or "number" from a rendered template string."""
     if raw is None:
         return "number"
-    low = raw.strip().lower()
+    raw = raw.strip()
+    low = raw.lower()
     if low in ("on", "off", "true", "false", "yes", "no"):
         return "bool"
-    r = raw.strip()
-    if _re.match(r"^\d{1,2}:\d{2}", r):
+    if _RE_HHMM.match(raw):
         return "time"
-    try:
-        datetime.fromisoformat(r)
-        return "time"
-    except (ValueError, TypeError):
-        pass
+    if len(raw) >= 10:
+        try:
+            datetime.fromisoformat(raw)
+            return "time"
+        except (ValueError, TypeError):
+            pass
     return "number"
 
 
 def _infer_type_from_entity(hass, entity_id: str) -> str:
+    """Infer "bool", "time", or "number" from entity domain and device_class."""
     domain = entity_id.split(".")[0]
     if domain in ("binary_sensor", "input_boolean", "switch", "device_tracker"):
         return "bool"
@@ -65,46 +72,40 @@ def _infer_type_from_entity(hass, entity_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Unified spec shape: {resolver(hass, now) -> float|None, type_fn() -> str}
+# Unified spec shape: {resolver(hass, now) -> (float|None, str)}
+# resolver returns (value, type) together.
 # ---------------------------------------------------------------------------
 
+def _wrap_built_in(fn, t):
+    def resolver(h, now): return (fn(h, now), t)
+    return {"resolver": resolver}
+
+
 def normalize_built_ins(built_in_vars: list) -> dict[str, dict]:
-    """Convert BUILT_IN_VARS list to {short: {resolver, type_fn}} dict."""
-    return {
-        v["short"]: {
-            "resolver": v["resolver"],
-            "type_fn": (lambda t=v["type"]: t),
-        }
-        for v in built_in_vars
-    }
+    """Convert BUILT_IN_VARS list to {short: {resolver}} dict."""
+    return {v["short"]: _wrap_built_in(v["resolver"], v["type"]) for v in built_in_vars}
 
 
 def build_custom_resolvers(hass, custom_vars_text: str) -> dict[str, dict]:
-    """Parse custom_vars text and return {name: {resolver, type_fn}} for each binding."""
+    """Parse custom_vars text and return {name: {resolver}} for each binding."""
     from homeassistant.helpers.template import Template
 
-    def _make(source):
-        if source.startswith("{{") and source.endswith("}}"):
-            tpl = Template(source, hass)
-            _last_raw: list[str | None] = [None]
-            def resolver(h, now, _tpl=tpl, _last=_last_raw):
-                try:
-                    raw = str(_tpl.async_render())
-                    _last[0] = raw
-                    return _coerce_state(raw)
-                except Exception:
-                    return None
-            def type_fn(_last=_last_raw):
-                return _infer_type_from_raw(_last[0])
-        else:
-            def resolver(h, now, _src=source):
-                state = h.states.get(_src)
-                if state is None or state.state in ("unavailable", "unknown"):
-                    return None
-                return _coerce_state(state.state)
-            def type_fn(_src=source, _hass=hass):
-                return _infer_type_from_entity(_hass, _src)
-        return {"resolver": resolver, "type_fn": type_fn}
+    def _make_template(source):
+        tpl = Template(source, hass)
+        def resolver(h, now, _tpl=tpl):
+            try:
+                raw = str(_tpl.async_render())
+                return (_coerce_state(raw), _infer_type_from_value(raw))
+            except Exception:
+                return (None, "number")
+        return {"resolver": resolver}
+
+    def _make_entity(source):
+        def resolver(h, now, _src=source, _hass=hass):
+            state = h.states.get(_src)
+            value = None if (state is None or state.state in ("unavailable", "unknown")) else _coerce_state(state.state)
+            return (value, _infer_type_from_entity(_hass, _src))
+        return {"resolver": resolver}
 
     result = {}
     for line in custom_vars_text.splitlines():
@@ -115,7 +116,8 @@ def build_custom_resolvers(hass, custom_vars_text: str) -> dict[str, dict]:
         name = name.strip().lower()
         source = source.strip()
         if name:
-            result[name] = _make(source)
+            make = _make_template if source.startswith("{{") and source.endswith("}}") else _make_entity
+            result[name] = make(source)
     return result
 
 
@@ -127,8 +129,7 @@ def resolve_all(hass, now, specs: dict[str, dict]) -> tuple[dict, dict]:
     """Resolve all vars. Returns (vals dict, types dict)."""
     vals, types = {}, {}
     for name, spec in specs.items():
-        vals[name]  = spec["resolver"](hass, now)
-        types[name] = spec["type_fn"]()
+        vals[name], types[name] = spec["resolver"](hass, now)
     return vals, types
 
 
@@ -155,7 +156,7 @@ def eval_vars(hass, custom_vars_text: str) -> list[dict]:
             try:
                 raw = str(Template(source, hass).async_render())
                 value    = _coerce_state(raw)
-                var_type = _infer_type_from_raw(raw)
+                var_type = _infer_type_from_value(raw)
             except Exception:
                 value, var_type = None, "number"
         else:

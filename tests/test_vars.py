@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from custom_components.smart_shades.vars import (
     _coerce_state,
-    _infer_type_from_raw,
+    _infer_type_from_value,
     normalize_built_ins,
 )
 
@@ -47,31 +47,31 @@ def test_coerce_iso_datetime_tz_aware():
     mock_dt.as_local.assert_called_once()
 
 
-# ── _infer_type_from_raw ──────────────────────────────────────────────────────
+# ── _infer_type_from_value ──────────────────────────────────────────────────────
 
 def test_infer_none_is_number():
-    assert _infer_type_from_raw(None) == "number"
+    assert _infer_type_from_value(None) == "number"
 
 def test_infer_bool_strings():
     for s in ("on", "off", "true", "false", "yes", "no", "ON", "True", "False"):
-        assert _infer_type_from_raw(s) == "bool", f"Expected bool for {s!r}"
+        assert _infer_type_from_value(s) == "bool", f"Expected bool for {s!r}"
 
 def test_infer_hhmm_is_time():
-    assert _infer_type_from_raw("8:30")  == "time"
-    assert _infer_type_from_raw("22:00") == "time"
+    assert _infer_type_from_value("8:30")  == "time"
+    assert _infer_type_from_value("22:00") == "time"
 
 def test_infer_iso_datetime_is_time():
-    assert _infer_type_from_raw("2026-05-17T14:30:00")       == "time"
-    assert _infer_type_from_raw("2026-05-17T14:30:00+00:00") == "time"
+    assert _infer_type_from_value("2026-05-17T14:30:00")       == "time"
+    assert _infer_type_from_value("2026-05-17T14:30:00+00:00") == "time"
 
 def test_infer_numeric_is_number():
-    assert _infer_type_from_raw("42")   == "number"
-    assert _infer_type_from_raw("3.14") == "number"
-    assert _infer_type_from_raw("1500") == "number"
+    assert _infer_type_from_value("42")   == "number"
+    assert _infer_type_from_value("3.14") == "number"
+    assert _infer_type_from_value("1500") == "number"
 
 def test_infer_unknown_is_number():
-    assert _infer_type_from_raw("unavailable") == "number"
-    assert _infer_type_from_raw("garbage")     == "number"
+    assert _infer_type_from_value("unavailable") == "number"
+    assert _infer_type_from_value("garbage")     == "number"
 
 
 # ── normalize_built_ins ───────────────────────────────────────────────────────
@@ -87,16 +87,10 @@ def test_normalize_shape():
     assert set(specs) == {"az", "t", "mo"}
     for spec in specs.values():
         assert callable(spec["resolver"])
-        assert callable(spec["type_fn"])
 
-def test_normalize_type_fn_captures_correctly():
-    # Each lambda must return its own type — guards against late-binding closure bug
+def test_normalize_resolver_returns_value_and_type():
+    # Guards against late-binding closure bug — each entry must return its own type
     specs = normalize_built_ins(_SAMPLE_BUILT_INS)
-    assert specs["az"]["type_fn"]() == "number"
-    assert specs["t"]["type_fn"]()  == "time"
-    assert specs["mo"]["type_fn"]() == "number"
-
-def test_normalize_resolver_passthrough():
-    specs = normalize_built_ins(_SAMPLE_BUILT_INS)
-    assert specs["az"]["resolver"](None, None) == 180.0
-    assert specs["t"]["resolver"](None, None)  == 1430.0
+    assert specs["az"]["resolver"](None, None) == (180.0,  "number")
+    assert specs["t"]["resolver"](None, None)  == (1430.0, "time")
+    assert specs["mo"]["resolver"](None, None) == (5.0,    "number")

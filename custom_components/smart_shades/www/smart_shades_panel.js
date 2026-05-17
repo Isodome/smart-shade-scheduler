@@ -1611,7 +1611,7 @@ class SmartShadesPanel extends HTMLElement {
         .join('\n') || '  (no values yet)';
 
       const prompt = `I am building a system to automate my shades in Home Assistant.
-Unlike standard Home Assistant automations which are event-driven and based on momentary triggers, this system operates as a continuous state engine. Declarative rules dictate the absolute position and tilt that covers should have based on current environmental inputs (time, sun azimuth/elevation, month, presence, workday). The system evaluates rules periodically and on sun/mode changes, and moves covers to match the desired state.
+Unlike standard Home Assistant automations which are event-driven and based on momentary triggers, this system operates as a continuous state engine. Declarative rules dictate the absolute position and tilt that covers should have based on current environmental inputs (time, sun azimuth/elevation, month, weekday, and any custom variables you define). The system evaluates rules periodically and on sun/mode changes, and moves covers to match the desired state.
 The active set of rules is chosen based on a specific input_select entity (the "Mode").
 
 ### System State
@@ -1638,8 +1638,7 @@ There are two top-level objects stored together:
           {"var": "azimuth",   "op": ">",  "val": 150},
           {"var": "elevation", "op": ">=", "val": 5},
           {"var": "time",      "op": ">",  "val": 830},
-          {"var": "month",     "op": ">=", "val": 6},
-          {"var": "presence",  "op": "==", "val": "home"}
+          {"var": "month",     "op": ">=", "val": 6}
         ],
         "action": {"position": 0, "tilt": 50}
       },
@@ -1673,8 +1672,22 @@ Action fields: "position" (0–100, omit to leave position unchanged), "tilt" (0
 2. **Current mode** groups run next. Groups are evaluated top-to-bottom; the first group whose conditions match claims its covers. A cover claimed here cannot be overwritten by later groups.
 3. **_fallback** groups run last, only for covers not yet claimed by priority or mode rules. Skipped entirely if block_fallback is set for the active mode.
 
+**3. custom_vars** — optional multiline string binding short names to HA entities or Jinja2 templates, one per line:
+
+\`\`\`
+mytemp=sensor.living_room_temperature
+ishome={{ is_state('person.alice', 'home') }}
+\`\`\`
+
+Each name becomes a condition var (e.g. \`{"var":"mytemp","op":">","val":22}\`). Bool bindings (Jinja2 templates resolving to true/false) can be used bare or negated with \`!\`. custom_vars is a plain string field — preserve it exactly when suggesting changes to rules or mode_config.
+
 ### Current Mode Config
 ${modeConfigSummary}
+
+### Current Custom Variables
+\`\`\`
+${this._customVars || '(none)'}
+\`\`\`
 
 ### Current Rules
 \`\`\`json
